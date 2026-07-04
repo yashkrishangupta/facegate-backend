@@ -53,40 +53,41 @@ The database has been designed according to the following principles.
 
 The backend consists of the following entities.
 
+Department
+        ↓
+Batch
+        ↓
+Faculty
+        ↓
+Subject
+        ↓
+Room
+        ↓
+AcademicCalendar
+        ↓
+AdminUser
+        ↓
 Student
-
-↓
-
-Attendance
-
-↓
-
-Session
-
-↓
-
-Device
-
-↓
-
-Timetable
-
-↓
-
-Holiday
-
-↓
-
+        ↓
 FaceEmbedding
-
-↓
-
+        ↓
+Device
+        ↓
+Timetable
+        ↓
+AttendanceSession
+        ↓
+Attendance
+        ↓
+Holiday
+        ↓
 Conflict
-
-↓
-
+        ↓
 ChangeLog
-
+        ↓
+DeviceSyncLog
+        ↓
+Notification
 
 
 # 4. Student
@@ -1512,7 +1513,7 @@ attendance_session
 | total_present | INTEGER | DEFAULT 0 | Number of students marked present |
 | total_absent | INTEGER | DEFAULT 0 | Number of students absent |
 | created_by | VARCHAR(100) | NOT NULL | Administrator or Faculty who created the session |
-| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Session creation timestamp |
+| admin_user.id | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Session creation timestamp |
 | updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last modification timestamp |
 
 ---
@@ -1688,3 +1689,991 @@ AttendanceSession (N)
 - Each Attendance Session acts as the parent record for all attendance entries collected during that class.
 - Once the session is marked COMPLETED, no further attendance modifications are allowed unless performed by an administrator.
 - Attendance statistics (present, absent, percentage) are calculated using the Attendance table associated with the session.
+
+# 15. Attendance
+
+## Purpose
+
+The **Attendance** table stores individual attendance records for students during an attendance session.
+
+Each record represents the attendance status of a single student for one attendance session.
+
+Attendance records are generated either automatically through Face Recognition or manually by an authorized administrator or faculty member.
+
+This table is the primary source for attendance reports, dashboards, analytics, and attendance history.
+
+---
+
+## Table Name
+
+attendance
+
+---
+
+## Columns
+
+| Column | Data Type | Constraints | Description |
+|---------|-----------|-------------|-------------|
+| id | UUID | PRIMARY KEY | Unique attendance record identifier |
+| attendance_session_id | UUID | FOREIGN KEY, NOT NULL | References AttendanceSession |
+| student_id | UUID | FOREIGN KEY, NOT NULL | References Student |
+| device_id | UUID | FOREIGN KEY | Device that marked attendance |
+| attendance_status | VARCHAR(20) | DEFAULT 'PRESENT' | PRESENT, ABSENT, LATE, EXCUSED |
+| attendance_method | VARCHAR(30) | DEFAULT 'FACE_RECOGNITION' | FACE_RECOGNITION, MANUAL, QR_CODE |
+| recognition_confidence | DECIMAL(5,2) | NULL | Face recognition confidence percentage |
+| attendance_time | TIMESTAMP | NOT NULL | Timestamp when attendance was marked |
+| remarks | TEXT | NULL | Additional remarks |
+| verified_by | UUID | NULL | References Faculty/Admin who verified or modified attendance |
+| sync_status | VARCHAR(20) | DEFAULT 'PENDING' | PENDING, SYNCED, FAILED |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Record creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last modification timestamp |
+
+---
+
+## Primary Key
+
+id
+
+---
+
+## Foreign Keys
+
+attendance_session_id → attendance_session(id)
+
+student_id → student(id)
+
+device_id → device(id)
+
+verified_by → faculty(id)
+
+---
+
+## Unique Constraints
+
+One student can have only one attendance record per attendance session.
+
+UNIQUE (attendance_session_id, student_id)
+
+---
+
+## Relationships
+
+### AttendanceSession
+
+One attendance session contains multiple attendance records.
+
+AttendanceSession (1)
+
+↓
+
+Attendance (N)
+
+---
+
+### Student
+
+One student can have multiple attendance records.
+
+Student (1)
+
+↓
+
+Attendance (N)
+
+---
+
+### Device
+
+One Android device can upload multiple attendance records.
+
+Device (1)
+
+↓
+
+Attendance (N)
+
+---
+
+### Faculty
+
+A faculty member may verify multiple attendance records.
+
+Faculty (1)
+
+↓
+
+Attendance (N)
+
+---
+
+## Indexes
+
+| Index | Purpose |
+|--------|---------|
+| attendance_session_id | Session-wise attendance lookup |
+| student_id | Student attendance history |
+| attendance_status | Attendance reports |
+| attendance_method | Method-wise analytics |
+| attendance_time | Date/time filtering |
+| sync_status | Synchronization tracking |
+
+---
+
+## Business Rules
+
+- Every attendance record must belong to a valid attendance session.
+- Every attendance record must reference an existing student.
+- A student can have only one attendance record for a given attendance session.
+- Attendance cannot be marked after the attendance window has expired unless manually overridden by an administrator.
+- Recognition confidence is recorded only for face recognition attendance.
+- Manual attendance records do not require a confidence score.
+- Attendance modifications are logged for auditing purposes.
+
+---
+
+## Sample Record
+
+| Column | Value |
+|---------|-------|
+| id | 5c2f9b48-1d8e-42e3-bfd2-c81e3c6b9e10 |
+| attendance_session_id | d83b1c9d-7e54-4b8b-98b4-4c8d3e91f123 |
+| student_id | 9bfb2fd5-27a4-4d55-b38f-3d65f0d82c61 |
+| device_id | 6f3d8b0c-fc2f-4b1e-a8d7-1a84d5d8b6b3 |
+| attendance_status | PRESENT |
+| attendance_method | FACE_RECOGNITION |
+| recognition_confidence | 98.75 |
+| attendance_time | 2026-07-15 10:05:12 |
+| remarks | NULL |
+| verified_by | NULL |
+| sync_status | SYNCED |
+| created_at | 2026-07-15 10:05:12 |
+| updated_at | 2026-07-15 10:05:12 |
+
+---
+
+## Notes
+
+- Every attendance record belongs to exactly one Attendance Session.
+- Attendance records are synchronized automatically from Android devices to the backend.
+- Recognition confidence is stored for analytics and future model evaluation.
+- Attendance modifications performed by administrators are tracked for transparency.
+- This table serves as the primary source for dashboards, reports, and attendance analytics.
+
+# 16. Holiday
+
+## Purpose
+
+The **Holiday** table stores detailed information about official holidays declared by the institution.
+
+A holiday represents a day on which regular academic activities are suspended. The FaceGate system references this table to prevent automatic attendance session generation and to synchronize holiday information with Android devices.
+
+The Holiday table works together with the AcademicCalendar table to ensure attendance is conducted only on valid academic working days.
+
+---
+
+## Table Name
+
+holiday
+
+---
+
+## Columns
+
+| Column | Data Type | Constraints | Description |
+|---------|-----------|-------------|-------------|
+| id | UUID | PRIMARY KEY | Unique holiday identifier |
+| calendar_id | UUID | FOREIGN KEY, NOT NULL | References AcademicCalendar |
+| holiday_name | VARCHAR(150) | NOT NULL | Name of the holiday |
+| holiday_type | VARCHAR(50) | NOT NULL | National, Gazetted, Institutional, Festival, Emergency |
+| description | TEXT | NULL | Additional information |
+| is_recurring | BOOLEAN | DEFAULT FALSE | Indicates whether the holiday repeats every year |
+| admin_user.id | VARCHAR(100) | NOT NULL | Administrator who created the holiday |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Record creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last modification timestamp |
+
+---
+
+## Primary Key
+
+id
+
+---
+
+## Foreign Keys
+
+calendar_id → academic_calendar(id)
+
+---
+
+## Relationships
+
+### AcademicCalendar
+
+One Academic Calendar entry may correspond to one holiday.
+
+AcademicCalendar (1)
+
+↓
+
+Holiday (1)
+
+---
+
+## Indexes
+
+| Index | Purpose |
+|--------|---------|
+| holiday_name | Search holidays |
+| holiday_type | Filter by holiday category |
+| calendar_id | Fast calendar lookup |
+
+---
+
+## Business Rules
+
+- Every holiday must reference a valid Academic Calendar entry.
+- Attendance Sessions cannot be generated for holidays unless explicitly overridden.
+- Holiday dates are synchronized automatically to Android devices.
+- Recurring holidays may be copied automatically into future academic years.
+- Deleted holidays should not remove historical attendance records.
+
+---
+
+## Sample Record
+
+| Column | Value |
+|---------|-------|
+| id | 71f0b3f7-a42d-4f11-bd82-3c67a0c6b918 |
+| calendar_id | c12e5a91-8b34-4f0e-9d61-5d6f87d3b2c8 |
+| holiday_name | Independence Day |
+| holiday_type | National Holiday |
+| description | Celebrated across the country |
+| is_recurring | TRUE |
+| declared_by | Admin |
+| created_at | 2026-07-05 09:00:00 |
+| updated_at | 2026-07-05 09:00:00 |
+
+---
+
+## Notes
+
+- Holiday records are synchronized with Android devices during the synchronization process.
+- Holidays prevent automatic Attendance Session generation.
+- Administrators can create institution-specific holidays without modifying the Academic Calendar structure.
+- The Holiday table serves as the authoritative source for holiday details, while the Academic Calendar determines attendance eligibility.
+
+# 17. Conflict
+
+## Purpose
+
+The **Conflict** table stores attendance-related conflicts detected by the FaceGate system during attendance collection, synchronization, or administrative operations.
+
+A conflict represents an abnormal condition requiring administrator review before the attendance data can be finalized.
+
+The Conflict table improves data integrity, provides a complete audit trail, and ensures that incorrect attendance records are not silently accepted into the system.
+
+---
+
+## Table Name
+
+conflict
+
+---
+
+## Columns
+
+| Column | Data Type | Constraints | Description |
+|---------|-----------|-------------|-------------|
+| id | UUID | PRIMARY KEY | Unique conflict identifier |
+| attendance_id | UUID | FOREIGN KEY | References the Attendance record involved in the conflict |
+| attendance_session_id | UUID | FOREIGN KEY | References the Attendance Session |
+| student_id | UUID | FOREIGN KEY | References the Student |
+| device_id | UUID | FOREIGN KEY | Device where the conflict occurred |
+| conflict_type | VARCHAR(50) | NOT NULL | Type of detected conflict |
+| severity | VARCHAR(20) | DEFAULT 'MEDIUM' | LOW, MEDIUM, HIGH, CRITICAL |
+| description | TEXT | NOT NULL | Detailed description of the conflict |
+| detected_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Time when the conflict was detected |
+| resolution_status | VARCHAR(20) | DEFAULT 'PENDING' | PENDING, RESOLVED, REJECTED |
+| admin_user.id | UUID | NULL | Administrator who resolved the conflict |
+| resolution_notes | TEXT | NULL | Administrator remarks |
+| resolved_at | TIMESTAMP | NULL | Time of resolution |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Record creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last modification timestamp |
+
+---
+
+## Primary Key
+
+id
+
+---
+
+## Foreign Keys
+
+attendance_id → attendance(id)
+
+attendance_session_id → attendance_session(id)
+
+student_id → student(id)
+
+device_id → device(id)
+
+resolved_by → admin_user(id) *(Future Enhancement)*
+
+---
+
+## Relationships
+
+### Attendance
+
+One attendance record may generate zero or more conflicts.
+
+Attendance (1)
+
+↓
+
+Conflict (N)
+
+---
+
+### Attendance Session
+
+One attendance session may contain multiple conflicts.
+
+AttendanceSession (1)
+
+↓
+
+Conflict (N)
+
+---
+
+### Student
+
+One student may be associated with multiple conflicts.
+
+Student (1)
+
+↓
+
+Conflict (N)
+
+---
+
+### Device
+
+One device may generate multiple conflicts.
+
+Device (1)
+
+↓
+
+Conflict (N)
+
+---
+
+## Conflict Types
+
+The system supports the following conflict categories:
+
+- DUPLICATE_ATTENDANCE
+- FACE_MISMATCH
+- LOW_CONFIDENCE
+- LATE_ATTENDANCE
+- MULTIPLE_DEVICE_UPLOAD
+- OFFLINE_SYNC_CONFLICT
+- MANUAL_OVERRIDE
+- SESSION_CLOSED
+- INVALID_DEVICE
+- UNKNOWN_STUDENT
+
+---
+
+## Indexes
+
+| Index | Purpose |
+|--------|---------|
+| attendance_id | Attendance lookup |
+| attendance_session_id | Session conflict lookup |
+| student_id | Student conflict history |
+| device_id | Device issue tracking |
+| conflict_type | Conflict analytics |
+| resolution_status | Pending conflict queue |
+| severity | Priority-based filtering |
+
+---
+
+## Business Rules
+
+- Every conflict must belong to an existing attendance session.
+- A conflict cannot exist without a valid reason.
+- Only administrators can resolve conflicts.
+- Once a conflict is resolved, its status cannot be changed without administrative authorization.
+- Conflict history must never be deleted.
+- Attendance reports should exclude unresolved critical conflicts if configured by the administrator.
+
+---
+
+## Sample Record
+
+| Column | Value |
+|---------|-------|
+| id | 3b9e2d4f-9d64-4ab2-bfb5-4e2d98ab1e11 |
+| attendance_id | 5c2f9b48-1d8e-42e3-bfd2-c81e3c6b9e10 |
+| attendance_session_id | d83b1c9d-7e54-4b8b-98b4-4c8d3e91f123 |
+| student_id | 9bfb2fd5-27a4-4d55-b38f-3d65f0d82c61 |
+| device_id | 6f3d8b0c-fc2f-4b1e-a8d7-1a84d5d8b6b3 |
+| conflict_type | LOW_CONFIDENCE |
+| severity | MEDIUM |
+| description | Face recognition confidence below the acceptable threshold. |
+| detected_at | 2026-07-15 10:05:15 |
+| resolution_status | PENDING |
+| resolved_by | NULL |
+| resolution_notes | NULL |
+| resolved_at | NULL |
+| created_at | 2026-07-15 10:05:15 |
+| updated_at | 2026-07-15 10:05:15 |
+
+---
+
+## Notes
+
+- Conflicts are generated automatically by backend validation rules during attendance processing.
+- Administrators review pending conflicts through the web dashboard.
+- Conflict records provide a complete audit trail for every attendance anomaly.
+- Resolution history is preserved to support future audits and reporting.
+- Conflict statistics are displayed on the administrative dashboard.
+
+# 18. ChangeLog
+
+## Purpose
+
+The **ChangeLog** table stores an audit trail of all significant operations performed within the FaceGate system.
+
+Every create, update, delete, synchronization, or administrative action is recorded in this table. The ChangeLog provides complete traceability of system activities, helping administrators monitor changes, investigate issues, and maintain accountability.
+
+The table supports system auditing, security monitoring, and debugging.
+
+---
+
+## Table Name
+
+change_log
+
+---
+
+## Columns
+
+| Column | Data Type | Constraints | Description |
+|---------|-----------|-------------|-------------|
+| id | UUID | PRIMARY KEY | Unique identifier for the log entry |
+| entity_name | VARCHAR(100) | NOT NULL | Name of the affected table/entity (Student, Attendance, Timetable, etc.) |
+| entity_id | UUID | NOT NULL | ID of the affected record |
+| action_type | VARCHAR(30) | NOT NULL | CREATE, UPDATE, DELETE, SYNC, LOGIN, LOGOUT |
+| admin_user.id | UUID | NULL | References the administrator or faculty who performed the action |
+| user_role | VARCHAR(30) | NOT NULL | ADMIN, FACULTY, SYSTEM, DEVICE |
+| old_value | JSONB | NULL | Previous state of the record |
+| new_value | JSONB | NULL | Updated state of the record |
+| ip_address | VARCHAR(45) | NULL | IP address of the requester |
+| device_id | UUID | NULL | Device responsible for the action (if applicable) |
+| remarks | TEXT | NULL | Additional notes |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Time when the action occurred |
+
+---
+
+## Primary Key
+
+id
+
+---
+
+## Foreign Keys
+
+performed_by → admin_user(id) *(Future Enhancement)*
+
+device_id → device(id)
+
+---
+
+## Relationships
+
+### Device
+
+One device can generate multiple log entries.
+
+Device (1)
+
+↓
+
+ChangeLog (N)
+
+---
+
+### Administrator
+
+One administrator can perform multiple actions.
+
+AdminUser (1)
+
+↓
+
+ChangeLog (N)
+
+---
+
+### System Entities
+
+The ChangeLog records changes for all major entities, including:
+
+- Student
+- Attendance
+- AttendanceSession
+- Timetable
+- Faculty
+- Subject
+- Batch
+- Room
+- Holiday
+- Conflict
+- Device
+
+---
+
+## Indexes
+
+| Index | Purpose |
+|--------|---------|
+| entity_name | Entity-wise audit lookup |
+| entity_id | Record history lookup |
+| action_type | Filter by operation |
+| performed_by | User activity tracking |
+| created_at | Chronological audit reports |
+| device_id | Device activity tracking |
+
+---
+
+## Business Rules
+
+- Every significant system operation must generate a ChangeLog entry.
+- ChangeLog entries are immutable and should never be edited.
+- Deleted records remain traceable through their ChangeLog entries.
+- System-generated events must use the role **SYSTEM**.
+- Device synchronization events must use the role **DEVICE**.
+- ChangeLog entries should be retained for audit and compliance purposes.
+
+---
+
+## Sample Record
+
+| Column | Value |
+|---------|-------|
+| id | 84a3f5c8-6b9d-4c7a-9d7f-5a1b3d2e6f11 |
+| entity_name | Student |
+| entity_id | 9bfb2fd5-27a4-4d55-b38f-3d65f0d82c61 |
+| action_type | UPDATE |
+| performed_by | 3c2f7b9e-4d6a-4b8c-91d5-2f7b6d1a3c11 |
+| user_role | ADMIN |
+| old_value | {"email":"old@college.edu"} |
+| new_value | {"email":"new@college.edu"} |
+| ip_address | 192.168.1.15 |
+| device_id | NULL |
+| remarks | Student email updated |
+| created_at | 2026-07-15 11:25:42 |
+
+---
+
+## Notes
+
+- The ChangeLog table provides a complete audit trail for all critical system operations.
+- Historical records are preserved even if the original data is modified or deleted.
+- JSONB fields (`old_value` and `new_value`) allow storage of complete record snapshots without requiring changes to the database schema.
+- ChangeLog data supports debugging, security analysis, compliance audits, and administrator activity monitoring.
+
+# 19. DeviceSyncLog
+
+## Purpose
+
+The **DeviceSyncLog** table stores detailed information about every synchronization operation performed between Android attendance devices and the FaceGate backend.
+
+Each synchronization attempt is recorded regardless of whether it succeeds or fails. The table enables administrators to monitor device activity, troubleshoot synchronization issues, analyze synchronization performance, and maintain a complete synchronization history.
+
+The DeviceSyncLog table is essential for supporting FaceGate's offline-first architecture.
+
+---
+
+## Table Name
+
+device_sync_log
+
+---
+
+## Columns
+
+| Column | Data Type | Constraints | Description |
+|---------|-----------|-------------|-------------|
+| id | UUID | PRIMARY KEY | Unique synchronization log identifier |
+| device_id | UUID | FOREIGN KEY, NOT NULL | References the Device table |
+| sync_type | VARCHAR(30) | NOT NULL | FULL_SYNC, ATTENDANCE_UPLOAD, STUDENT_DOWNLOAD, TIMETABLE_SYNC, HOLIDAY_SYNC |
+| sync_direction | VARCHAR(20) | NOT NULL | UPLOAD, DOWNLOAD, BIDIRECTIONAL |
+| sync_status | VARCHAR(20) | DEFAULT 'SUCCESS' | SUCCESS, FAILED, PARTIAL |
+| sync_start_time | TIMESTAMP | NOT NULL | Synchronization start time |
+| sync_end_time | TIMESTAMP | NOT NULL | Synchronization completion time |
+| records_uploaded | INTEGER | DEFAULT 0 | Number of records uploaded to the backend |
+| records_downloaded | INTEGER | DEFAULT 0 | Number of records downloaded from the backend |
+| failed_records | INTEGER | DEFAULT 0 | Number of records that failed during synchronization |
+| error_message | TEXT | NULL | Error details in case of synchronization failure |
+| app_version | VARCHAR(20) | NOT NULL | FaceGate Android application version |
+| network_type | VARCHAR(20) | NULL | WiFi, Mobile Data, Ethernet |
+| sync_duration_ms | INTEGER | NOT NULL | Total synchronization duration in milliseconds |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Synchronization log creation timestamp |
+
+---
+
+## Primary Key
+
+id
+
+---
+
+## Foreign Keys
+
+device_id → device(id)
+
+---
+
+## Relationships
+
+### Device
+
+One device can perform multiple synchronization operations.
+
+Device (1)
+
+↓
+
+DeviceSyncLog (N)
+
+---
+
+## Indexes
+
+| Index | Purpose |
+|--------|---------|
+| device_id | Retrieve synchronization history for a device |
+| sync_status | Filter successful and failed synchronizations |
+| sync_type | Synchronization analytics |
+| sync_start_time | Chronological reports |
+| created_at | Recent synchronization history |
+
+---
+
+## Business Rules
+
+- Every synchronization attempt must generate a DeviceSyncLog entry.
+- Failed synchronizations must include an error message whenever possible.
+- Synchronization duration is calculated automatically.
+- Records uploaded and downloaded cannot be negative.
+- Synchronization history must never be deleted.
+- Only registered and active devices are allowed to synchronize.
+
+---
+
+## Sample Record
+
+| Column | Value |
+|---------|-------|
+| id | 9a1d7f82-4b6c-43f8-8c91-6b4a2d8e7c51 |
+| device_id | 6f3d8b0c-fc2f-4b1e-a8d7-1a84d5d8b6b3 |
+| sync_type | ATTENDANCE_UPLOAD |
+| sync_direction | UPLOAD |
+| sync_status | SUCCESS |
+| sync_start_time | 2026-07-15 11:00:00 |
+| sync_end_time | 2026-07-15 11:00:08 |
+| records_uploaded | 68 |
+| records_downloaded | 4 |
+| failed_records | 0 |
+| error_message | NULL |
+| app_version | 1.0.0 |
+| network_type | WiFi |
+| sync_duration_ms | 8120 |
+| created_at | 2026-07-15 11:00:08 |
+
+---
+
+## Notes
+
+- Every synchronization attempt is recorded regardless of its outcome.
+- Synchronization statistics are displayed on the administrative dashboard.
+- Failed synchronization logs help administrators identify network or device-related issues.
+- DeviceSyncLog supports offline synchronization by maintaining a complete history of upload and download operations.
+- Historical synchronization data can be used to generate device performance reports and identify unreliable devices.
+
+# 20. AdminUser
+
+## Purpose
+
+The **AdminUser** table stores the information of all authorized users who can access and manage the FaceGate administrative system.
+
+Administrators are responsible for managing students, faculty, timetables, attendance sessions, holidays, reports, and resolving attendance conflicts.
+
+The table also provides authentication and role-based authorization for the FaceGate Web Dashboard.
+
+Instead of storing administrator names repeatedly across different tables, the system references the AdminUser table using foreign keys.
+
+---
+
+## Table Name
+
+admin_user
+
+---
+
+## Columns
+
+| Column | Data Type | Constraints | Description |
+|---------|-----------|-------------|-------------|
+| id | UUID | PRIMARY KEY | Unique administrator identifier |
+| employee_id | VARCHAR(30) | UNIQUE, NOT NULL | Official employee ID |
+| full_name | VARCHAR(150) | NOT NULL | Administrator's full name |
+| email | VARCHAR(120) | UNIQUE, NOT NULL | Official email address |
+| password_hash | TEXT | NOT NULL | Encrypted password |
+| role | VARCHAR(30) | NOT NULL | SUPER_ADMIN, ADMIN, FACULTY_ADMIN |
+| phone | VARCHAR(20) | NULL | Contact number |
+| last_login | TIMESTAMP | NULL | Last successful login |
+| account_status | VARCHAR(20) | DEFAULT 'ACTIVE' | ACTIVE, BLOCKED, DISABLED |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Account creation timestamp |
+| updated_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Last modification timestamp |
+
+---
+
+## Primary Key
+
+id
+
+---
+
+## Unique Constraints
+
+- employee_id
+- email
+
+---
+
+## Relationships
+
+### AttendanceSession
+
+One administrator can create multiple attendance sessions.
+
+AdminUser (1)
+
+↓
+
+AttendanceSession (N)
+
+---
+
+### Holiday
+
+One administrator can declare multiple holidays.
+
+AdminUser (1)
+
+↓
+
+Holiday (N)
+
+---
+
+### Conflict
+
+One administrator can resolve multiple conflicts.
+
+AdminUser (1)
+
+↓
+
+Conflict (N)
+
+---
+
+### ChangeLog
+
+One administrator can generate multiple log entries.
+
+AdminUser (1)
+
+↓
+
+ChangeLog (N)
+
+---
+
+## Indexes
+
+| Index | Purpose |
+|--------|---------|
+| employee_id | Administrator lookup |
+| email | Login |
+| role | Role filtering |
+| account_status | Active administrators |
+| last_login | Login history |
+
+---
+
+## Business Rules
+
+- Every administrator must have a unique employee ID.
+- Every administrator must have a unique email address.
+- Passwords must be stored only as secure hashes.
+- Only ACTIVE administrators may log in.
+- SUPER_ADMIN users have complete system access.
+- ADMIN users manage daily operations.
+- FACULTY_ADMIN users have limited administrative permissions.
+
+---
+
+## Sample Record
+
+| Column | Value |
+|---------|-------|
+| id | 6b84fd91-a4c5-48d7-b1c2-8d43aefb4c10 |
+| employee_id | PECADM001 |
+| full_name | Dr. Anjali Sharma |
+| email | admin@pec.edu.in |
+| password_hash | Encrypted Hash |
+| role | SUPER_ADMIN |
+| phone | 9876543210 |
+| last_login | 2026-07-15 08:45:21 |
+| account_status | ACTIVE |
+| created_at | 2026-07-01 09:00:00 |
+| updated_at | 2026-07-15 08:45:21 |
+
+---
+
+## Notes
+
+- The AdminUser table is responsible for authentication and authorization within the FaceGate Web Dashboard.
+- Passwords are stored using secure hashing algorithms such as bcrypt.
+- Role-Based Access Control (RBAC) determines administrator permissions.
+
+# 21. Notification
+
+## Purpose
+
+The **Notification** table stores all system-generated and administrator-generated notifications within the FaceGate platform.
+
+Notifications keep administrators informed about important system events, synchronization issues, attendance conflicts, device failures, and scheduled attendance sessions.
+
+Notifications are displayed on the Web Dashboard and may also be delivered to Android devices in future versions.
+
+---
+
+## Table Name
+
+notification
+
+---
+
+## Columns
+
+| Column | Data Type | Constraints | Description |
+|---------|-----------|-------------|-------------|
+| id | UUID | PRIMARY KEY | Unique notification identifier |
+| title | VARCHAR(150) | NOT NULL | Notification title |
+| message | TEXT | NOT NULL | Detailed notification message |
+| notification_type | VARCHAR(50) | NOT NULL | SYSTEM, ATTENDANCE, DEVICE, CONFLICT, HOLIDAY, TIMETABLE |
+| priority | VARCHAR(20) | DEFAULT 'MEDIUM' | LOW, MEDIUM, HIGH, CRITICAL |
+| recipient_id | UUID | FOREIGN KEY | Administrator receiving the notification |
+| is_read | BOOLEAN | DEFAULT FALSE | Read status |
+| action_url | VARCHAR(255) | NULL | Dashboard page to open when clicked |
+| expires_at | TIMESTAMP | NULL | Notification expiry time |
+| created_at | TIMESTAMP | DEFAULT CURRENT_TIMESTAMP | Notification creation timestamp |
+
+---
+
+## Primary Key
+
+id
+
+---
+
+## Foreign Keys
+
+recipient_id → admin_user(id)
+
+---
+
+## Relationships
+
+### AdminUser
+
+One administrator can receive multiple notifications.
+
+AdminUser (1)
+
+↓
+
+Notification (N)
+
+---
+
+## Notification Types
+
+The system supports the following notification categories.
+
+- SYSTEM
+- ATTENDANCE
+- DEVICE
+- CONFLICT
+- TIMETABLE
+- HOLIDAY
+- REPORT
+- SECURITY
+
+---
+
+## Indexes
+
+| Index | Purpose |
+|--------|---------|
+| recipient_id | Administrator notifications |
+| notification_type | Filter notification category |
+| priority | Priority filtering |
+| is_read | Unread notification lookup |
+| created_at | Recent notifications |
+
+---
+
+## Business Rules
+
+- Notifications are generated automatically by backend services.
+- Notifications may also be created manually by administrators.
+- Notifications marked as read remain in the system until archived.
+- Critical notifications should always appear at the top of the dashboard.
+- Expired notifications are automatically archived.
+
+---
+
+## Sample Record
+
+| Column | Value |
+|---------|-------|
+| id | e72d93b5-1e2d-4fd5-98f2-3c5d8b1f4e20 |
+| title | Device Offline |
+| message | Room 101 Tablet has not synchronized for more than 30 minutes. |
+| notification_type | DEVICE |
+| priority | HIGH |
+| recipient_id | 6b84fd91-a4c5-48d7-b1c2-8d43aefb4c10 |
+| is_read | FALSE |
+| action_url | /dashboard/devices |
+| expires_at | NULL |
+| created_at | 2026-07-15 11:45:00 |
+
+---
+
+## Notes
+
+- Notifications improve administrator awareness and operational efficiency.
+- The Notification table powers the alert panel on the FaceGate dashboard.
+- Future versions may support push notifications, email alerts, and SMS notifications using the same notification records.
