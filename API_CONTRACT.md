@@ -860,3 +860,294 @@ DeviceSyncLog Updated
    ▼
 Dashboard Displays Live Status
 
+# 5.Timetable Module
+## Module Overview
+
+The Timetable module manages the academic schedule for all batches. It allows administrators to create, update, retrieve, and delete timetable entries while ensuring there are no scheduling conflicts between faculty, rooms, or batches.
+
+Attendance Sessions are automatically generated based on the Timetable and Academic Calendar.
+
+## 1. Create Timetable Entry
+## Endpoint
+POST /api/v1/timetables
+## Description
+Creates a new timetable entry for a batch.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Headers
+Header	Value
+## Authorization	Bearer <JWT_TOKEN>
+Content-Type	application/json
+## Request Body
+{
+  "departmentId": "8a3b2e41-c8b4-4c18-ae9d-7c2f1c8f64a1",
+  "batchId": "b2a7d8d3-8f3a-4d6a-b9b4-c62d83b73f11",
+  "subjectId": "a1d3c5b8-9f7d-42d3-8b1f-5a7e8c6d9b20",
+  "facultyId": "5f91f0d3-7c32-4d3a-a8d1-6b5d8d27e3f1",
+  "roomId": "6f31bca2-fc92-4d84-bcc8-5c0d8d7a22c1",
+  "dayOfWeek": "Monday",
+  "periodNumber": 2,
+  "startTime": "10:00",
+  "endTime": "11:00",
+  "semester": 5,
+  "academicYear": "2026-27",
+  "attendanceWindow": 10
+}
+## Validation Rules
+Field	Validation
+departmentId	Must exist
+batchId	Must exist
+facultyId	Must exist
+subjectId	Must exist
+roomId	Must exist
+endTime	Greater than startTime
+dayOfWeek	Monday–Sunday
+## Success Response
+201 Created
+{
+  "success": true,
+  "message": "Timetable entry created successfully.",
+  "data": {
+    "timetableId": "87d2f1b5-a56c-4d72-bf0d-2f3a98e13d41"
+  }
+}
+## Error Responses
+### Faculty Conflict
+409 Conflict
+{
+  "success": false,
+  "message": "Faculty already has a class scheduled during this time."
+}
+### Room Conflict
+{
+  "success": false,
+  "message": "Room is already occupied during this time."
+}
+### Batch Conflict
+{
+  "success": false,
+  "message": "Batch already has another lecture during this time."
+}
+## Database Tables Used
+timetable
+department
+batch
+faculty
+subject
+room
+change_log
+
+## Business Logic
+Validate all foreign keys.
+Check faculty availability.
+Check room availability.
+Check batch schedule.
+Create timetable entry.
+Log action in ChangeLog.
+
+## 2. Get All Timetable Entries
+## Endpoint
+GET /api/v1/timetables
+## Description
+Returns a paginated list of timetable entries.
+
+## Query Parameters
+Parameter	Description
+page	Page number
+limit	Records per page
+batchId	Filter by batch
+facultyId	Filter by faculty
+roomId	Filter by room
+semester	Filter by semester
+## Success Response
+{
+  "success": true,
+  "page": 1,
+  "total": 180,
+  "data": [
+    {
+      "id": "...",
+      "dayOfWeek": "Monday",
+      "subject": "Data Structures",
+      "faculty": "Dr. Sharma",
+      "room": "LH101"
+    }
+  ]
+}
+## Database Tables Used
+timetable
+faculty
+subject
+batch
+room
+
+## 3. Get Timetable by ID
+## Endpoint
+GET /api/v1/timetables/{timetableId}
+## Description
+Returns details of a specific timetable entry.
+
+## Success Response
+{
+  "success": true,
+  "data": {
+    "id": "...",
+    "department": "CSE",
+    "batch": "CSE-2024-A",
+    "faculty": "Dr. Sharma",
+    "subject": "Data Structures",
+    "room": "LH101",
+    "dayOfWeek": "Monday",
+    "startTime": "10:00",
+    "endTime": "11:00"
+  }
+}
+## Database Tables Used
+timetable
+department
+batch
+faculty
+subject
+room
+
+## 4. Update Timetable
+## Endpoint
+PUT /api/v1/timetables/{timetableId}
+## Description
+Updates an existing timetable entry.
+
+## Request Body
+{
+  "roomId": "...",
+  "facultyId": "...",
+  "startTime": "11:00",
+  "endTime": "12:00"
+}
+## Success Response
+200 OK
+{
+  "success": true,
+  "message": "Timetable updated successfully."
+}
+## Business Logic
+Revalidate all scheduling conflicts.
+Update timetable.
+Record old and new values in ChangeLog.
+## Database Tables Used
+timetable
+change_log
+
+## 5. Delete Timetable Entry
+## Endpoint
+DELETE /api/v1/timetables/{timetableId}
+## Description
+Soft deletes a timetable entry.
+
+## Success Response
+{
+  "success": true,
+  "message": "Timetable entry deleted successfully."
+}
+## Business Logic
+Set is_active = false.
+Preserve historical attendance sessions.
+Log deletion.
+## Database Tables Used
+timetable
+change_log
+
+## 6. Get Timetable by Batch
+## Endpoint
+GET /api/v1/timetables/batch/{batchId}
+## Description
+Returns the complete timetable for a batch.
+
+## Success Response
+{
+  "success": true,
+  "batch": "CSE-2024-A",
+  "timetable": [
+    {
+      "day": "Monday",
+      "subject": "Data Structures",
+      "time": "10:00 - 11:00",
+      "room": "LH101"
+    }
+  ]
+}
+## Database Tables Used
+timetable
+batch
+subject
+faculty
+room
+
+## 7. Get Timetable by Faculty
+## Endpoint
+GET /api/v1/timetables/faculty/{facultyId}
+## Description
+Returns the teaching schedule of a faculty member.
+
+## Success Response
+{
+  "success": true,
+  "faculty": "Dr. Sharma",
+  "schedule": [
+    {
+      "day": "Monday",
+      "batch": "CSE-2024-A",
+      "subject": "Data Structures",
+      "time": "10:00 - 11:00"
+    }
+  ]
+}
+## Database Tables Used
+timetable
+faculty
+batch
+subject
+
+## Timetable API Summary
+Method	Endpoint	Description
+POST	/api/v1/timetables	Create Timetable Entry
+GET	/api/v1/timetables	Get All Timetable Entries
+GET	/api/v1/timetables/{id}	Get Timetable Details
+PUT	/api/v1/timetables/{id}	Update Timetable
+DELETE	/api/v1/timetables/{id}	Soft Delete Timetable
+GET	/api/v1/timetables/batch/{batchId}	Batch Timetable
+GET	/api/v1/timetables/faculty/{facultyId}	Faculty Timetable
+Security
+Only administrators can create, update, or delete timetable entries.
+Every timetable modification is recorded in the ChangeLog.
+Conflict validation prevents overlapping schedules for rooms, faculty, and batches.
+Only active timetable entries are synchronized to Android devices.
+
+## Timetable Workflow
+Admin
+   │
+   ▼
+Create Timetable
+   │
+   ▼
+Validate Batch
+   │
+   ▼
+Validate Faculty
+   │
+   ▼
+Validate Room
+   │
+   ▼
+Check Scheduling Conflicts
+   │
+   ▼
+Save Timetable
+   │
+   ▼
+Generate Future Attendance Sessions
+   │
+   ▼
+Synchronize to Android Devices
+
