@@ -2006,4 +2006,251 @@ Overview Statistics
       ├────────► Attendance Analytics
       └────────► Recent Activities
 
-      
+# 9.Reports Module
+## Module Overview
+
+The Reports module provides attendance reports and analytics for students, batches, faculty, departments, and subjects. It supports filtering by date, semester, batch, and subject, and allows exporting reports in PDF or Excel format.
+
+All report APIs require administrator authentication.
+
+## 1. Student Attendance Report
+## Endpoint
+GET /api/v1/reports/students/{studentId}
+## Description
+Returns the attendance report of a specific student.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Query Parameters
+Parameter	Required	Description
+from	No	Start Date
+to	No	End Date
+semester	No	Semester
+subjectId	No	Subject
+Example
+GET /api/v1/reports/students/9bc18df2?semester=5
+## Success Response
+{
+  "success": true,
+  "data": {
+    "studentId": "9bc18df2",
+    "studentName": "Rahul Sharma",
+    "batch": "CSE-2024-A",
+    "overallAttendance": 92.4,
+    "subjects": [
+      {
+        "subject": "Data Structures",
+        "present": 26,
+        "total": 28,
+        "percentage": 92.8
+      }
+    ]
+  }
+}
+## Database Tables Used
+attendance
+attendance_session
+student
+subject
+
+## Business Logic
+Calculate attendance percentage.
+Group attendance by subject.
+Return attendance summary.
+
+## 2. Batch Attendance Report
+## Endpoint
+GET /api/v1/reports/batches/{batchId}
+## Description
+Returns attendance statistics for an entire batch.
+
+## Query Parameters
+Parameter	Description
+from	Start Date
+to	End Date
+subjectId	Subject
+## Success Response
+{
+  "success": true,
+  "batch": "CSE-2024-A",
+  "overallAttendance": 91.2,
+  "students": [
+    {
+      "student": "Rahul Sharma",
+      "attendance": 92.4
+    }
+  ]
+}
+## Database Tables Used
+batch
+student
+attendance
+
+## 3. Faculty Attendance Report
+## Endpoint
+GET /api/v1/reports/faculties/{facultyId}
+## Description
+Returns attendance statistics for classes conducted by a faculty member.
+
+## Success Response
+{
+  "success": true,
+  "faculty": "Dr. Sharma",
+  "classesConducted": 42,
+  "averageAttendance": 89.3
+}
+## Database Tables Used
+faculty
+timetable
+attendance_session
+attendance
+
+## 4. Subject Attendance Report
+## Endpoint
+GET /api/v1/reports/subjects/{subjectId}
+## Description
+Returns attendance statistics for a particular subject.
+
+## Success Response
+{
+  "success": true,
+  "subject": "Data Structures",
+  "overallAttendance": 88.6
+}
+## Database Tables Used
+subject
+attendance
+attendance_session
+
+## 5. Daily Attendance Report
+## Endpoint
+GET /api/v1/reports/daily
+## Description
+Returns attendance statistics for a selected day.
+
+## Query Parameters
+Parameter	Description
+date	Attendance Date
+## Success Response
+{
+  "success": true,
+  "date": "2026-07-15",
+  "sessions": 34,
+  "present": 2134,
+  "absent": 118,
+  "attendancePercentage": 94.7
+}
+## Database Tables Used
+attendance
+attendance_session
+
+## 6. Monthly Attendance Report
+## Endpoint
+GET /api/v1/reports/monthly
+## Description
+Returns attendance statistics for an entire month.
+
+## Query Parameters
+Parameter	Description
+month	Month
+year	Year
+## Success Response
+{
+  "success": true,
+  "month": "July",
+  "workingDays": 24,
+  "overallAttendance": 93.2
+}
+## Database Tables Used
+attendance
+attendance_session
+academic_calendar
+
+## 7. Department Attendance Report
+## Endpoint
+GET /api/v1/reports/departments/{departmentId}
+## Description
+Returns attendance statistics for an academic department.
+
+## Success Response
+{
+  "success": true,
+  "department": "Computer Science",
+  "overallAttendance": 94.1
+}
+## Database Tables Used
+department
+batch
+attendance
+
+## 8. Export Report
+## Endpoint
+GET /api/v1/reports/export
+## Description
+Exports attendance reports as PDF or Excel.
+
+## Query Parameters
+Parameter	Description
+reportType	student, batch, faculty, subject, daily, monthly
+format	pdf, excel
+id	Entity ID (if applicable)
+Example
+GET /api/v1/reports/export?reportType=student&id=9bc18df2&format=pdf
+## Success Response
+{
+  "success": true,
+  "downloadUrl": "/downloads/student-report-9bc18df2.pdf"
+}
+## Database Tables Used
+attendance
+attendance_session
+student
+batch
+faculty
+subject
+
+## Business Logic
+Generate report.
+Format report.
+Store temporarily.
+Return download link.
+
+## Reports API Summary
+Method	Endpoint	Description
+GET	/api/v1/reports/students/{studentId}	Student Report
+GET	/api/v1/reports/batches/{batchId}	Batch Report
+GET	/api/v1/reports/faculties/{facultyId}	Faculty Report
+GET	/api/v1/reports/subjects/{subjectId}	Subject Report
+GET	/api/v1/reports/daily	Daily Report
+GET	/api/v1/reports/monthly	Monthly Report
+GET	/api/v1/reports/departments/{departmentId}	Department Report
+GET	/api/v1/reports/export	Export Reports
+
+## Security
+Reports are accessible only to authenticated administrators.
+Role-Based Access Control (RBAC) determines which reports a user can access.
+Exported reports are generated on demand and should expire after a configurable time.
+Report generation and downloads can be logged in the ChangeLog table for auditing.
+
+## Report Generation Workflow
+Admin Login
+      │
+      ▼
+Select Report Type
+      │
+      ▼
+Apply Filters
+      │
+      ▼
+Retrieve Attendance Data
+      │
+      ▼
+Calculate Statistics
+      │
+      ▼
+Generate Report
+      │
+      ├────────► Display on Dashboard
+      │
+      └────────► Export as PDF / Excel
