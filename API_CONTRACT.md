@@ -1741,3 +1741,269 @@ Sync to Backend
       │
       ▼
 Dashboard Updated
+
+# 8.Dashboard Module
+## Module Overview
+
+The Dashboard module provides real-time and summarized information about the FaceGate system. It aggregates data from attendance sessions, devices, students, synchronization logs, conflicts, and notifications to present a live overview to administrators.
+
+The Dashboard APIs are read-only and require administrator authentication.
+
+## 1. Dashboard Overview
+## Endpoint
+GET /api/v1/dashboard/overview
+## Description
+Returns the overall statistics displayed on the dashboard homepage.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Headers
+Header	Value
+Authorization	Bearer <JWT_TOKEN>
+## Success Response
+200 OK
+{
+  "success": true,
+  "data": {
+    "totalStudents": 1250,
+    "totalFaculty": 68,
+    "totalDepartments": 6,
+    "totalRooms": 42,
+    "activeDevices": 18,
+    "offlineDevices": 2,
+    "todayAttendanceSessions": 35,
+    "activeSessions": 4,
+    "todayAttendancePercentage": 93.8
+  }
+}
+## Database Tables Used
+student
+faculty
+department
+room
+device
+attendance_session
+attendance
+
+## Business Logic
+Count active students
+Count faculty
+Count departments
+Count devices
+Calculate today's attendance percentage
+Return dashboard statistics
+
+## 2. Live Attendance Dashboard
+## Endpoint
+GET /api/v1/dashboard/live-attendance
+## Description
+Returns all currently active attendance sessions with live attendance statistics.
+
+## Success Response
+{
+  "success": true,
+  "sessions": [
+    {
+      "sessionId": "...",
+      "subject": "Data Structures",
+      "faculty": "Dr. Sharma",
+      "batch": "CSE-2024-A",
+      "room": "LH101",
+      "present": 58,
+      "expected": 72,
+      "percentage": 80.5,
+      "status": "ACTIVE"
+    }
+  ]
+}
+## Database Tables Used
+attendance_session
+attendance
+timetable
+faculty
+subject
+batch
+room
+
+## 3. Device Monitoring
+## Endpoint
+GET /api/v1/dashboard/devices
+## Description
+Returns the live status of all registered Android devices.
+
+## Success Response
+{
+  "success": true,
+  "devices": [
+    {
+      "deviceId": "FG-ROOM101-TAB01",
+      "room": "LH101",
+      "status": "ONLINE",
+      "battery": 84,
+      "lastHeartbeat": "2026-07-15T11:15:00Z",
+      "lastSync": "2026-07-15T11:10:00Z"
+    }
+  ]
+}
+## Database Tables Used
+device
+room
+device_sync_log
+
+## Business Logic
+Show online/offline status
+Display battery level
+Display last heartbeat
+Display last synchronization
+
+## 4. Synchronization Status
+## Endpoint
+GET /api/v1/dashboard/synchronization
+## Description
+Displays synchronization health of all devices.
+
+## Success Response
+{
+  "success": true,
+  "summary": {
+    "successfulSyncs": 24,
+    "failedSyncs": 2,
+    "pendingSyncs": 1
+  }
+}
+## Database Tables Used
+device_sync_log
+device
+
+## 5. Conflict Dashboard
+## Endpoint
+GET /api/v1/dashboard/conflicts
+## Description
+Returns unresolved attendance conflicts.
+
+## Success Response
+{
+  "success": true,
+  "pending": 5,
+  "conflicts": [
+    {
+      "id": "...",
+      "student": "Rahul Sharma",
+      "type": "LOW_CONFIDENCE",
+      "severity": "MEDIUM",
+      "status": "PENDING"
+    }
+  ]
+}
+## Database Tables Used
+conflict
+attendance
+student
+
+## 6. Attendance Analytics
+## Endpoint
+GET /api/v1/dashboard/analytics
+## Description
+Returns summarized attendance analytics for visualization.
+
+## Query Parameters
+Parameter	Description
+from	Start date
+to	End date
+## Success Response
+{
+  "success": true,
+  "analytics": {
+    "overallAttendance": 94.2,
+    "averagePerDay": 91.8,
+    "highestAttendanceDepartment": "CSE",
+    "lowestAttendanceDepartment": "Mechanical"
+  }
+}
+## Database Tables Used
+attendance
+attendance_session
+department
+
+## 7. Recent Activities
+## Endpoint
+GET /api/v1/dashboard/activity
+## Description
+Returns recent activities performed in the system.
+
+## Success Response
+{
+  "success": true,
+  "activities": [
+    {
+      "time": "11:10 AM",
+      "action": "Attendance session started",
+      "user": "Admin"
+    },
+    {
+      "time": "11:05 AM",
+      "action": "New device registered",
+      "user": "Admin"
+    }
+  ]
+}
+## Database Tables Used
+change_log
+
+## 8. Dashboard Notifications
+## Endpoint
+GET /api/v1/dashboard/notifications
+## Description
+Returns unread notifications for the dashboard.
+
+## Success Response
+{
+  "success": true,
+  "notifications": [
+    {
+      "title": "Device Offline",
+      "priority": "HIGH",
+      "message": "Room 101 Tablet has not synchronized for 30 minutes."
+    }
+  ]
+}
+## Database Tables Used
+notification
+
+## Dashboard API Summary
+Method	Endpoint	Description
+GET	/api/v1/dashboard/overview	Dashboard Statistics
+GET	/api/v1/dashboard/live-attendance	Live Attendance Sessions
+GET	/api/v1/dashboard/devices	Device Monitoring
+GET	/api/v1/dashboard/synchronization	Synchronization Status
+GET	/api/v1/dashboard/conflicts	Pending Conflicts
+GET	/api/v1/dashboard/analytics	Attendance Analytics
+GET	/api/v1/dashboard/activity	Recent Activities
+GET	/api/v1/dashboard/notifications	Dashboard Notifications
+
+## Security
+All Dashboard APIs require Administrator Authentication.
+Access is controlled using Role-Based Access Control (RBAC).
+Dashboard endpoints are read-only.
+Sensitive information is filtered based on the administrator's role.
+Dashboard refreshes periodically to provide near real-time updates.
+
+## Dashboard Workflow
+Admin Login
+      │
+      ▼
+Dashboard Loaded
+      │
+      ▼
+Overview Statistics
+      │
+      ├────────► Live Attendance
+      ├────────► Device Status
+      ├────────► Synchronization Status
+      ├────────► Pending Conflicts
+      ├────────► Notifications
+      ├────────► Attendance Analytics
+      └────────► Recent Activities
+
+      
