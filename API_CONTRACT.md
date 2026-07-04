@@ -1428,3 +1428,316 @@ Generate Attendance Summary
    │
    ▼
 Dashboard Updated
+
+# 7.Attendance Module
+## Module Overview
+
+The Attendance module manages all attendance-related operations within the FaceGate system.
+
+It enables Android devices and administrators to mark attendance, upload offline attendance records, retrieve attendance history, perform manual attendance corrections, and generate attendance summaries.
+
+Every attendance record belongs to an Attendance Session.
+
+## 1. Mark Attendance (Face Recognition)
+## Endpoint
+POST /api/v1/attendance
+## Description
+Marks attendance for a student using Face Recognition.
+
+## Authentication
+Device Token Required
+
+## Headers
+Header	Value
+## Authorization	Device Token
+Content-Type	application/json
+## Request Body
+{
+    "attendanceSessionId":"d83b1c9d-7e54-4b8b-98b4-4c8d3e91f123",
+    "studentId":"9bc18df2-84fd-45a4-b58c-d239d4bc6320",
+    "deviceId":"6f3d8b0c-fc2f-4b1e-a8d7-1a84d5d8b6b3",
+    "recognitionConfidence":98.75,
+    "attendanceTime":"2026-07-15T10:05:12Z"
+}
+## Validation Rules
+Field	Validation
+attendanceSessionId	Must exist
+studentId	Must exist
+deviceId	Must exist
+recognitionConfidence	0–100
+## Success Response
+201 Created
+{
+    "success":true,
+    "message":"Attendance marked successfully."
+}
+## Error Responses
+### Duplicate Attendance
+409 Conflict
+{
+    "success":false,
+    "message":"Attendance already marked."
+}
+### Session Closed
+{
+    "success":false,
+    "message":"Attendance session has ended."
+}
+### Database Tables Used
+attendance
+attendance_session
+student
+device
+conflict
+change_log
+
+## Business Logic
+Verify attendance session is ACTIVE.
+Verify student exists.
+Verify attendance not already marked.
+Validate confidence threshold.
+Save attendance.
+Update attendance statistics.
+Generate Conflict if required.
+
+## 2. Manual Attendance
+## Endpoint
+POST /api/v1/attendance/manual
+## Description
+Allows administrators to manually mark or correct attendance.
+
+## Authentication
+Bearer Token Required (Admin)
+
+## Request Body
+{
+    "attendanceSessionId":"...",
+    "studentId":"...",
+    "attendanceStatus":"PRESENT",
+    "remarks":"Face recognition failed"
+}
+## Success Response
+200 OK
+{
+    "success":true,
+    "message":"Manual attendance recorded successfully."
+}
+## Database Tables Used
+attendance
+admin_user
+change_log
+conflict
+
+## Business Logic
+Verify admin permissions.
+Update attendance.
+Record manual override.
+Create ChangeLog.
+
+## 3. Get Attendance by Session
+## Endpoint
+GET /api/v1/attendance/session/{sessionId}
+## Description
+Returns all attendance records for a particular attendance session.
+
+## Success Response
+{
+    "success":true,
+    "attendance":[
+        {
+            "studentName":"Rahul Sharma",
+            "status":"PRESENT",
+            "time":"10:03 AM"
+        }
+    ]
+}
+## Database Tables Used
+attendance
+student
+attendance_session
+
+## 4. Get Student Attendance History
+## Endpoint
+GET /api/v1/attendance/student/{studentId}
+## Description
+Returns the attendance history of a student.
+
+## Query Parameters
+Parameter	Description
+semester	Optional
+subjectId	Optional
+from	Optional
+to	Optional
+## Success Response
+{
+    "success":true,
+    "attendancePercentage":92.6,
+    "records":[
+        {
+            "subject":"Data Structures",
+            "status":"PRESENT",
+            "date":"2026-07-15"
+        }
+    ]
+}
+## Database Tables Used
+attendance
+attendance_session
+student
+subject
+
+## 5. Update Attendance
+## Endpoint
+PUT /api/v1/attendance/{attendanceId}
+## Description
+Updates an attendance record.
+
+## Authentication
+Admin Only
+
+## Request Body
+{
+    "attendanceStatus":"ABSENT",
+    "remarks":"Incorrect recognition"
+}
+## Success Response
+200 OK
+{
+    "success":true,
+    "message":"Attendance updated successfully."
+}
+## Database Tables Used
+attendance
+change_log
+conflict
+
+## Business Logic
+Validate permissions.
+Update attendance.
+Record audit.
+Generate Conflict if necessary.
+
+## 6. Delete Attendance Record
+## Endpoint
+DELETE /api/v1/attendance/{attendanceId}
+## Description
+Deletes an attendance record (soft delete).
+
+## Success Response
+{
+    "success":true,
+    "message":"Attendance deleted successfully."
+}
+## Business Logic
+Instead of deleting,
+is_active = false
+
+## Database Tables Used
+attendance
+change_log
+
+## 7. Upload Offline Attendance
+## Endpoint
+POST /api/v1/attendance/sync
+## Description
+Uploads attendance records collected while the Android device was offline.
+
+## Authentication
+Device Token Required
+
+## Request Body
+{
+  "deviceId":"FG-ROOM101-TAB01",
+  "attendance":[
+      {
+          "studentId":"...",
+          "attendanceSessionId":"...",
+          "time":"..."
+      }
+  ]
+}
+## Success Response
+200 OK
+{
+    "success":true,
+    "uploaded":65,
+    "failed":1
+}
+## Database Tables Used
+attendance
+device
+device_sync_log
+conflict
+
+## Business Logic
+Validate device.
+Check duplicate records.
+Upload attendance.
+Create DeviceSyncLog.
+Generate conflicts if needed.
+
+## 8. Attendance Summary
+## Endpoint
+GET /api/v1/attendance/session/{sessionId}/summary
+## Description
+Returns attendance statistics for one session.
+
+## Success Response
+{
+    "success":true,
+    "summary":{
+        "totalStudents":72,
+        "present":68,
+        "absent":4,
+        "attendancePercentage":94.4
+    }
+}
+## Database Tables Used
+attendance
+attendance_session
+## Attendance API Summary
+Method	Endpoint	Description
+POST	/api/v1/attendance	Mark Attendance
+POST	/api/v1/attendance/manual	Manual Attendance
+GET	/api/v1/attendance/session/{id}	Session Attendance
+GET	/api/v1/attendance/student/{id}	Student Attendance History
+PUT	/api/v1/attendance/{id}	Update Attendance
+DELETE	/api/v1/attendance/{id}	Soft Delete Attendance
+POST	/api/v1/attendance/sync	Upload Offline Attendance
+GET	/api/v1/attendance/session/{id}/summary	Attendance Summary
+
+## Security
+Only registered devices can mark attendance.
+Attendance can only be marked during an ACTIVE session.
+Duplicate attendance is automatically rejected.
+Manual attendance requires administrator privileges.
+Every modification is recorded in the ChangeLog.
+Synchronization events are recorded in DeviceSyncLog.
+Suspicious activity generates entries in the Conflict table.
+
+## Attendance Workflow
+Android Device
+      │
+      ▼
+Face Recognition
+      │
+      ▼
+Match Student
+      │
+      ▼
+Validate Session
+      │
+      ▼
+Save Attendance
+      │
+      ▼
+Update Session Statistics
+      │
+      ▼
+Generate Conflict (if required)
+      │
+      ▼
+Sync to Backend
+      │
+      ▼
+Dashboard Updated
