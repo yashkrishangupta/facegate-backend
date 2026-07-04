@@ -610,3 +610,253 @@ face_embedding
 batch
 device
 
+# 4.Device Module
+## Module Overview
+
+The Device module manages Android attendance devices registered with the FaceGate system.
+
+It provides APIs for device registration, authentication, status monitoring, heartbeat communication, synchronization, and device management.
+
+Only registered and active devices are allowed to synchronize attendance data with the backend.
+
+## 1. Register Device
+## Endpoint
+POST /api/v1/devices
+## Description
+Registers a new Android device with the FaceGate backend.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Headers
+Header	Value
+## Authorization	Bearer <JWT_TOKEN>
+Content-Type	application/json
+## Request Body
+{
+    "deviceId":"FG-ROOM101-TAB01",
+    "deviceName":"Room 101 Tablet",
+    "roomId":"6f31bca2-fc92-4d84-bcc8-5c0d8d7a22c1",
+    "appVersion":"1.0.0",
+    "osVersion":"Android 14"
+}
+## Success Response
+201 Created
+{
+    "success":true,
+    "message":"Device registered successfully."
+}
+## Database Tables Used
+device
+room
+change_log
+
+## Business Logic
+Verify room exists.
+Ensure device ID is unique.
+Register device.
+Log registration.
+
+## 2. Get All Devices
+## Endpoint
+GET /api/v1/devices
+## Description
+Returns all registered devices.
+
+## Authentication
+Bearer Token Required
+
+## Query Parameters
+Parameter	Description
+roomId	Filter by room
+status	Active / Inactive
+page	Page number
+limit	Records per page
+## Success Response
+{
+    "success":true,
+    "devices":[
+        {
+            "deviceId":"FG-ROOM101-TAB01",
+            "room":"LH101",
+            "status":"ONLINE",
+            "lastSync":"2026-07-15T10:45:00Z"
+        }
+    ]
+}
+## Database Tables Used
+device
+
+## 3. Get Device Details
+## Endpoint
+GET /api/v1/devices/{deviceId}
+## Description
+Returns detailed information about one device.
+
+## Success Response
+{
+    "success":true,
+    "data":{
+        "deviceId":"FG-ROOM101-TAB01",
+        "deviceName":"Room 101 Tablet",
+        "room":"LH101",
+        "status":"ONLINE",
+        "batteryLevel":82,
+        "lastSeen":"2026-07-15T10:50:00Z",
+        "lastSync":"2026-07-15T10:45:00Z"
+    }
+}
+## Database Tables Used
+device
+room
+device_sync_log
+
+## 4. Update Device
+## Endpoint
+PUT /api/v1/devices/{deviceId}
+## Description
+Updates device information.
+
+## Request Body
+{
+    "deviceName":"Computer Lab Tablet",
+    "roomId":"..."
+}
+## Success Response
+200 OK
+{
+    "success":true,
+    "message":"Device updated successfully."
+}
+## Database Tables Used
+device
+change_log
+
+## 5. Deactivate Device
+## Endpoint
+DELETE /api/v1/devices/{deviceId}
+## Description
+Marks a device as inactive.
+
+## Success Response
+{
+    "success":true,
+    "message":"Device deactivated successfully."
+}
+## Business Logic
+Device is not deleted.
+Set
+is_active = false
+
+## Database Tables Used
+device
+change_log
+
+## 6. Device Heartbeat
+## Endpoint
+POST /api/v1/devices/heartbeat
+
+## Description
+Android device periodically informs the server that it is online.
+
+## Authentication
+Device Token Required
+
+## Request Body
+{
+    "deviceId":"FG-ROOM101-TAB01",
+    "batteryLevel":78,
+    "storageAvailable":18234,
+    "networkStatus":"ONLINE"
+}
+## Success Response
+{
+    "success":true,
+    "message":"Heartbeat received."
+}
+## Database Tables Used
+device
+## Business Logic
+Update
+last_seen
+battery_level
+storage_available
+network_status
+
+## 7. Get Device Health
+## Endpoint
+GET /api/v1/devices/{deviceId}/health
+## Description
+Returns live health information for a device.
+
+## Success Response
+{
+    "batteryLevel":80,
+    "networkStatus":"ONLINE",
+    "storageAvailable":18500,
+    "lastSeen":"2026-07-15T11:20:00Z",
+    "syncStatus":"SUCCESS"
+}
+## Database Tables Used
+device
+device_sync_log
+
+## 8. Get Device Synchronization History
+## Endpoint
+GET /api/v1/devices/{deviceId}/sync-history
+## Description
+Returns synchronization history of a device.
+
+## Success Response
+{
+    "success":true,
+    "history":[
+        {
+            "syncType":"ATTENDANCE_UPLOAD",
+            "status":"SUCCESS",
+            "time":"2026-07-15T10:45:00Z"
+        }
+    ]
+}
+## Database Tables Used
+device
+device_sync_log
+## Device API Summary
+Method	Endpoint	Description
+POST	/api/v1/devices	Register Device
+GET	/api/v1/devices	Get All Devices
+GET	/api/v1/devices/{deviceId}	Device Details
+PUT	/api/v1/devices/{deviceId}	Update Device
+DELETE	/api/v1/devices/{deviceId}	Deactivate Device
+POST	/api/v1/devices/heartbeat	Device Heartbeat
+GET	/api/v1/devices/{deviceId}/health	Device Health
+GET	/api/v1/devices/{deviceId}/sync-history	Device Sync History
+Security
+Only administrators can register or update devices.
+Every Android device receives a unique Device Token after registration.
+Only active devices can synchronize attendance.
+Every device operation is recorded in the ChangeLog.
+Heartbeat requests update the live dashboard.
+Device synchronization events are stored in the DeviceSyncLog.
+
+## Device Workflow
+Admin
+   │
+   ▼
+Register Device
+   │
+   ▼
+Device Receives Token
+   │
+   ▼
+Heartbeat Every Few Minutes
+   │
+   ▼
+Sync Attendance
+   │
+   ▼
+DeviceSyncLog Updated
+   │
+   ▼
+Dashboard Displays Live Status
+
