@@ -1151,3 +1151,280 @@ Generate Future Attendance Sessions
    ▼
 Synchronize to Android Devices
 
+# 6. Attendance Session Module
+## Module Overview
+
+The Attendance Session module manages the lifecycle of attendance sessions. Sessions are generated automatically from the timetable based on the academic calendar or manually created by authorized administrators. The module allows starting, ending, viewing, and managing attendance sessions.
+
+## 1. Generate Attendance Session
+## Endpoint
+POST /api/v1/attendance-sessions
+## Description
+Creates an attendance session from a timetable entry for a specific date.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Headers
+Header	Value
+## Authorization	Bearer <JWT_TOKEN>
+Content-Type	application/json
+## Request Body
+{
+    "timetableId":"87d2f1b5-a56c-4d72-bf0d-2f3a98e13d41",
+    "calendarId":"c12e5a91-8b34-4f0e-9d61-5d6f87d3b2c8",
+    "sessionDate":"2026-07-15"
+}
+## Validation Rules
+Field	Validation
+timetableId	Must exist
+calendarId	Must exist
+sessionDate	Must be a working day
+## Success Response
+201 Created
+{
+    "success": true,
+    "message": "Attendance session generated successfully.",
+    "data": {
+        "attendanceSessionId":"d83b1c9d-7e54-4b8b-98b4-4c8d3e91f123"
+    }
+}
+## Error Response
+409 Conflict
+{
+    "success": false,
+    "message":"Attendance session already exists."
+}
+## Database Tables Used
+attendance_session
+timetable
+academic_calendar
+change_log
+
+## Business Logic
+Verify timetable exists.
+Verify academic calendar entry.
+Ensure attendance session doesn't already exist.
+Create attendance session.
+Record operation in ChangeLog.
+
+## 2. Get All Attendance Sessions
+## Endpoint
+GET /api/v1/attendance-sessions
+## Description
+Returns all attendance sessions with optional filters.
+
+## Query Parameters
+Parameter	Description
+page	Page number
+limit	Records per page
+date	Session date
+batchId	Batch
+facultyId	Faculty
+status	ACTIVE, COMPLETED
+## Success Response
+{
+  "success": true,
+  "page": 1,
+  "total": 32,
+  "data": [
+    {
+      "sessionId":"...",
+      "subject":"Data Structures",
+      "faculty":"Dr. Sharma",
+      "status":"ACTIVE"
+    }
+  ]
+}
+## Database Tables Used
+attendance_session
+timetable
+
+## 3. Get Attendance Session Details
+## Endpoint
+GET /api/v1/attendance-sessions/{sessionId}
+## Description
+Returns complete details of a single attendance session.
+
+## Success Response
+{
+    "success":true,
+    "data":{
+        "sessionId":"...",
+        "date":"2026-07-15",
+        "subject":"Data Structures",
+        "faculty":"Dr. Sharma",
+        "room":"LH101",
+        "attendanceWindow":10,
+        "status":"ACTIVE"
+    }
+}
+## Database Tables Used
+attendance_session
+timetable
+subject
+faculty
+room
+
+## 4. Start Attendance Session
+## Endpoint
+POST /api/v1/attendance-sessions/{sessionId}/start
+## Description
+Starts an attendance session and makes it available for attendance marking.
+
+## Success Response
+200 OK
+{
+    "success":true,
+    "message":"Attendance session started successfully."
+}
+## Business Logic
+Change status to ACTIVE.
+Open attendance window.
+Notify registered Android devices.
+## Database Tables Used
+attendance_session
+notification
+change_log
+
+## 5. End Attendance Session
+## Endpoint
+POST /api/v1/attendance-sessions/{sessionId}/end
+## Description
+Ends the attendance session and prevents further attendance submissions.
+
+## Success Response
+{
+    "success":true,
+    "message":"Attendance session completed successfully."
+}
+## Business Logic
+Close attendance window.
+Calculate attendance summary.
+Update session statistics.
+Notify dashboard.
+## Database Tables Used
+attendance_session
+attendance
+notification
+change_log
+
+## 6. Update Attendance Session
+## Endpoint
+PUT /api/v1/attendance-sessions/{sessionId}
+## Description
+Updates an attendance session before it is completed.
+
+## Request Body
+{
+    "attendanceWindow":15,
+    "status":"ACTIVE"
+}
+## Success Response
+200 OK
+{
+    "success":true,
+    "message":"Attendance session updated successfully."
+}
+## Database Tables Used
+attendance_session
+change_log
+
+## Business Logic
+Only ACTIVE sessions can be updated.
+COMPLETED sessions are read-only.
+
+## 7. Cancel Attendance Session
+## Endpoint
+DELETE /api/v1/attendance-sessions/{sessionId}
+## Description
+Cancels an attendance session.
+
+## Success Response
+{
+    "success":true,
+    "message":"Attendance session cancelled successfully."
+}
+## Business Logic
+Set session status to CANCELLED.
+Existing attendance records remain for audit unless explicitly removed by an administrator.
+Record the action in ChangeLog.
+## Database Tables Used
+attendance_session
+change_log
+
+## 8. Get Live Attendance Session
+## Endpoint
+GET /api/v1/attendance-sessions/live
+## Description
+Returns the currently active attendance session.
+This API powers the Live Dashboard.
+
+## Success Response
+{
+  "success": true,
+  "data": {
+    "sessionId":"...",
+    "subject":"Data Structures",
+    "faculty":"Dr. Sharma",
+    "batch":"CSE-2024-A",
+    "room":"LH101",
+    "present":58,
+    "totalStudents":72,
+    "status":"ACTIVE"
+  }
+}
+## Database Tables Used
+attendance_session
+attendance
+timetable
+
+## Attendance Session API Summary
+Method	Endpoint	Description
+POST	/api/v1/attendance-sessions	Generate Attendance Session
+GET	/api/v1/attendance-sessions	Get All Sessions
+GET	/api/v1/attendance-sessions/{id}	Get Session Details
+POST	/api/v1/attendance-sessions/{id}/start	Start Session
+POST	/api/v1/attendance-sessions/{id}/end	End Session
+PUT	/api/v1/attendance-sessions/{id}	Update Session
+DELETE	/api/v1/attendance-sessions/{id}	Cancel Session
+GET	/api/v1/attendance-sessions/live	Get Live Session
+Security
+Only administrators can create, update, start, end, or cancel sessions.
+Attendance can only be marked while the session status is ACTIVE.
+Completed sessions are read-only.
+Every action is recorded in the ChangeLog.
+Devices synchronize only active sessions assigned to them.
+
+## Attendance Session Workflow
+Admin
+   │
+   ▼
+Generate Attendance Session
+   │
+   ▼
+Validate Timetable
+   │
+   ▼
+Validate Academic Calendar
+   │
+   ▼
+Create Session
+   │
+   ▼
+Start Session
+   │
+   ▼
+Android Devices Download Session
+   │
+   ▼
+Students Mark Attendance
+   │
+   ▼
+End Session
+   │
+   ▼
+Generate Attendance Summary
+   │
+   ▼
+Dashboard Updated
