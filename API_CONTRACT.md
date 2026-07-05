@@ -3016,3 +3016,320 @@ Holiday Sync API
       ▼
 Android Devices Updated
 
+
+# 13. Synchronization Module
+## Module Overview
+
+The Synchronization module enables secure communication between Android devices and the FaceGate backend.
+
+It supports offline attendance collection by allowing Android devices to download required data (students, face embeddings, timetables, holidays, attendance sessions) and upload attendance records collected while offline.
+
+The module also records synchronization history and detects synchronization conflicts.
+
+## 1. Full Synchronization
+## Endpoint
+POST /api/v1/sync/full
+## Description
+Downloads all required data for a newly registered Android device.
+This API is called during the first setup or when a complete resynchronization is required.
+
+## Authentication
+Device Token Required
+
+## Headers
+Header	Value
+Authorization	Device Token
+Content-Type	application/json
+## Request Body
+{
+    "deviceId":"FG-ROOM101-TAB01",
+    "appVersion":"1.0.0"
+}
+## Success Response
+200 OK
+{
+    "success":true,
+    "data":{
+        "students":[],
+        "faceEmbeddings":[],
+        "timetable":[],
+        "attendanceSessions":[],
+        "holidays":[]
+    }
+}
+## Database Tables Used
+student
+face_embedding
+timetable
+attendance_session
+holiday
+device
+device_sync_log
+
+## Business Logic
+Verify device.
+Download complete dataset.
+Create DeviceSyncLog.
+
+## 2. Incremental Synchronization
+## Endpoint
+GET /api/v1/sync/incremental
+## Description
+Returns only records modified after the previous synchronization.
+
+## Authentication
+Device Token Required
+
+## Query Parameters
+Parameter	Description
+lastSync	Last synchronization timestamp
+Example
+GET /api/v1/sync/incremental?lastSync=2026-07-15T09:30:00Z
+## Success Response
+{
+    "success":true,
+    "changes":{
+        "students":[],
+        "faceEmbeddings":[],
+        "timetable":[],
+        "attendanceSessions":[],
+        "holidays":[]
+    }
+}
+## Database Tables Used
+student
+face_embedding
+timetable
+attendance_session
+holiday
+device_sync_log
+
+## 3. Upload Offline Attendance
+## Endpoint
+POST /api/v1/sync/attendance
+## Description
+Uploads attendance records collected while offline.
+
+## Authentication
+Device Token Required
+
+## Request Body
+{
+    "deviceId":"FG-ROOM101-TAB01",
+    "attendance":[
+        {
+            "studentId":"...",
+            "attendanceSessionId":"...",
+            "recognitionConfidence":97.8,
+            "attendanceTime":"2026-07-15T10:05:00Z"
+        }
+    ]
+}
+## Success Response
+{
+    "success":true,
+    "uploaded":65,
+    "failed":2
+}
+## Database Tables Used
+attendance
+attendance_session
+conflict
+device_sync_log
+
+## Business Logic
+Validate session.
+Reject duplicates.
+Save attendance.
+Detect conflicts.
+Update synchronization log.
+
+## 4. Synchronize Attendance Sessions
+## Endpoint
+GET /api/v1/sync/attendance-sessions
+## Description
+Downloads active attendance sessions assigned to the device.
+
+## Query Parameters
+Parameter	Description
+roomId	Device room
+lastSync	Optional
+## Success Response
+{
+    "success":true,
+    "attendanceSessions":[]
+}
+## Database Tables Used
+attendance_session
+timetable
+device
+
+## 5. Synchronize Students
+## Endpoint
+GET /api/v1/sync/students
+## Description
+Downloads students assigned to the device's batches.
+
+## Success Response
+{
+    "success":true,
+    "students":[]
+}
+## Database Tables Used
+student
+batch
+device
+
+## 6. Synchronize Face Embeddings
+## Endpoint
+GET /api/v1/sync/face-embeddings
+## Description
+Downloads updated face embeddings.
+
+## Success Response
+{
+    "success":true,
+    "embeddings":[]
+}
+## Database Tables Used
+face_embedding
+student
+
+## 7. Synchronize Timetable
+## Endpoint
+GET /api/v1/sync/timetable
+## Description
+Downloads timetable updates.
+
+## Success Response
+{
+    "success":true,
+    "timetable":[]
+}
+## Database Tables Used
+timetable
+faculty
+subject
+room
+
+## 8. Synchronize Holidays
+## Endpoint
+GET /api/v1/sync/holidays
+## Description
+Downloads updated holidays.
+
+## Success Response
+{
+    "success":true,
+    "holidays":[]
+}
+## Database Tables Used
+holiday
+
+## 9. Heartbeat
+## Endpoint
+POST /api/v1/sync/heartbeat
+## Description
+Android periodically reports its health to the backend.
+
+## Request Body
+{
+    "deviceId":"FG-ROOM101-TAB01",
+    "battery":84,
+    "network":"WiFi",
+    "storageAvailable":18324
+}
+## Success Response
+{
+    "success":true
+}
+## Database Tables Used
+device
+
+## 10. Synchronization Status
+## Endpoint
+GET /api/v1/sync/status
+## Description
+Returns synchronization status of the requesting device.
+
+## Success Response
+{
+    "success":true,
+    "status":"SUCCESS",
+    "lastSync":"2026-07-15T11:05:00Z",
+    "pendingUploads":0
+}
+## Database Tables Used
+device_sync_log
+device
+
+## 11. Retry Failed Synchronization
+## Endpoint
+POST /api/v1/sync/retry
+## Description
+Retries uploading failed attendance records.
+
+## Success Response
+{
+    "success":true,
+    "retried":2,
+    "uploaded":2
+}
+## Database Tables Used
+attendance
+device_sync_log
+conflict
+
+## Synchronization API Summary
+Method	Endpoint	Description
+POST	/api/v1/sync/full	Full Device Synchronization
+GET	/api/v1/sync/incremental	Incremental Synchronization
+POST	/api/v1/sync/attendance	Upload Offline Attendance
+GET	/api/v1/sync/attendance-sessions	Download Attendance Sessions
+GET	/api/v1/sync/students	Download Students
+GET	/api/v1/sync/face-embeddings	Download Face Embeddings
+GET	/api/v1/sync/timetable	Download Timetable
+GET	/api/v1/sync/holidays	Download Holidays
+POST	/api/v1/sync/heartbeat	Device Heartbeat
+GET	/api/v1/sync/status	Synchronization Status
+POST	/api/v1/sync/retry	Retry Failed Synchronization
+
+## Security
+All synchronization APIs require a valid Device Token.
+Communication must occur over HTTPS.
+Each synchronization request is recorded in the DeviceSyncLog.
+Devices can only download data relevant to their assigned room, batch, or timetable.
+Incremental synchronization minimizes bandwidth by returning only modified records.
+Duplicate attendance uploads are rejected automatically.
+Synchronization conflicts are recorded in the Conflict table for administrator review.
+
+## Synchronization Workflow
+Android Device
+      │
+      ▼
+Authenticate Using Device Token
+      │
+      ▼
+Request Full / Incremental Sync
+      │
+      ├────────► Students
+      ├────────► Face Embeddings
+      ├────────► Timetable
+      ├────────► Attendance Sessions
+      └────────► Holidays
+      │
+      ▼
+Offline Attendance Collection
+      │
+      ▼
+Upload Attendance Records
+      │
+      ▼
+Backend Validation
+      │
+      ├────────► Store Attendance
+      ├────────► Generate Conflicts (if any)
+      ├────────► Update DeviceSyncLog
+      └────────► Return Synchronization Result
+
+      
