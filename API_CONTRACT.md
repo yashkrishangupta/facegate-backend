@@ -2254,3 +2254,217 @@ Generate Report
       ├────────► Display on Dashboard
       │
       └────────► Export as PDF / Excel
+
+# 10. Conflict Module
+## Module Overview
+
+The Conflict module manages attendance anomalies detected by the FaceGate system. Conflicts are generated automatically during attendance processing and synchronization. Administrators can view, investigate, and resolve these conflicts through the web dashboard.
+
+All Conflict APIs require administrator authentication.
+
+## 1. Get All Conflicts
+## Endpoint
+GET /api/v1/conflicts
+## Description
+Returns a paginated list of attendance conflicts.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Query Parameters
+Parameter	Required	Description
+page	No	Page number
+limit	No	Records per page
+severity	No	LOW, MEDIUM, HIGH, CRITICAL
+status	No	PENDING, RESOLVED
+type	No	Conflict type
+sessionId	No	Attendance Session ID
+Example
+GET /api/v1/conflicts?status=PENDING&severity=HIGH
+## Success Response
+200 OK
+{
+  "success": true,
+  "page": 1,
+  "total": 12,
+  "data": [
+    {
+      "id": "cf-001",
+      "studentName": "Rahul Sharma",
+      "conflictType": "LOW_CONFIDENCE",
+      "severity": "MEDIUM",
+      "status": "PENDING",
+      "detectedAt": "2026-07-15T10:05:15Z"
+    }
+  ]
+}
+## Database Tables Used
+conflict
+attendance
+student
+attendance_session
+
+## Business Logic
+Retrieve conflicts based on filters.
+Support pagination.
+Sort by detection time (latest first).
+## 2. Get Conflict Details
+## Endpoint
+GET /api/v1/conflicts/{conflictId}
+## Description
+Returns complete information about a specific conflict.
+
+## Success Response
+{
+  "success": true,
+  "data": {
+    "id": "cf-001",
+    "student": "Rahul Sharma",
+    "attendanceSession": "Data Structures",
+    "conflictType": "LOW_CONFIDENCE",
+    "severity": "MEDIUM",
+    "description": "Face recognition confidence below threshold.",
+    "status": "PENDING",
+    "detectedAt": "2026-07-15T10:05:15Z"
+  }
+}
+## Database Tables Used
+conflict
+attendance
+attendance_session
+student
+
+## 3. Resolve Conflict
+## Endpoint
+PUT /api/v1/conflicts/{conflictId}/resolve
+## Description
+Marks a conflict as resolved after administrator review.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Request Body
+{
+  "resolutionNotes": "Attendance verified manually.",
+  "actionTaken": "MARK_PRESENT"
+}
+## Success Response
+200 OK
+{
+  "success": true,
+  "message": "Conflict resolved successfully."
+}
+## Error Response
+404 Not Found
+{
+  "success": false,
+  "message": "Conflict not found."
+}
+## Database Tables Used
+conflict
+admin_user
+change_log
+
+## Business Logic
+Verify administrator permissions.
+Update conflict status to RESOLVED.
+Save resolution notes.
+Record administrator ID.
+Add entry to ChangeLog.
+
+## 4. Reopen Conflict
+## Endpoint
+PUT /api/v1/conflicts/{conflictId}/reopen
+## Description
+Reopens a previously resolved conflict.
+
+## Success Response
+{
+  "success": true,
+  "message": "Conflict reopened successfully."
+}
+## Database Tables Used
+conflict
+change_log
+
+## Business Logic
+Only SUPER_ADMIN may reopen conflicts.
+Reset status to PENDING.
+Record action in ChangeLog.
+
+## 5. Get Pending Conflicts
+## Endpoint
+GET /api/v1/conflicts/pending
+## Description
+Returns all unresolved conflicts.
+
+## Success Response
+{
+  "success": true,
+  "pendingCount": 6,
+  "conflicts": [
+    {
+      "student": "Rahul Sharma",
+      "type": "LOW_CONFIDENCE",
+      "severity": "MEDIUM"
+    }
+  ]
+}
+## Database Tables Used
+conflict
+## 6. Get Conflict Statistics
+## Endpoint
+GET /api/v1/conflicts/statistics
+## Description
+Returns conflict analytics for the dashboard.
+
+## Success Response
+{
+  "success": true,
+  "statistics": {
+    "total": 45,
+    "pending": 8,
+    "resolved": 37,
+    "highSeverity": 2,
+    "lowConfidence": 20,
+    "duplicateAttendance": 12
+  }
+}
+## Database Tables Used
+conflict
+## 7. Delete Conflict
+## Endpoint
+DELETE /api/v1/conflicts/{conflictId}
+## Description
+Archives a conflict record.
+Note: For audit purposes, conflicts should normally be archived (soft delete) rather than permanently removed.
+
+## Success Response
+{
+  "success": true,
+  "message": "Conflict archived successfully."
+}
+## Database Tables Used
+conflict
+change_log
+
+## Business Logic
+Mark conflict as archived.
+Preserve audit history.
+Record operation in ChangeLog.
+## Conflict API Summary
+Method	Endpoint	Description
+GET	/api/v1/conflicts	Get All Conflicts
+GET	/api/v1/conflicts/{id}	Get Conflict Details
+PUT	/api/v1/conflicts/{id}/resolve	Resolve Conflict
+PUT	/api/v1/conflicts/{id}/reopen	Reopen Conflict
+GET	/api/v1/conflicts/pending	Get Pending Conflicts
+GET	/api/v1/conflicts/statistics	Conflict Analytics
+DELETE	/api/v1/conflicts/{id}	Archive Conflict
+
+## Security
+Only authenticated administrators can access Conflict APIs.
+Only SUPER_ADMIN can reopen archived or resolved conflicts.
+All conflict actions are recorded in the ChangeLog.
+Conflict records are retained for audit purposes.
+
