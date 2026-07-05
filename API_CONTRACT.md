@@ -3332,4 +3332,149 @@ Backend Validation
       ├────────► Update DeviceSyncLog
       └────────► Return Synchronization Result
 
-      
+# 14. Administration (Master Data) Module
+## Module Overview
+
+The Administration module manages the master data of the FaceGate system. It provides CRUD operations for Departments, Batches, Faculty, Subjects, Rooms, Academic Calendar, and Administrator Users.
+
+These APIs are accessible only to administrators and are used to configure the system before attendance operations begin.
+
+## 1. Department APIs
+## Endpoints
+Method	Endpoint	Description
+POST	/api/v1/departments	Create Department
+GET	/api/v1/departments	Get All Departments
+GET	/api/v1/departments/{id}	Department Details
+PUT	/api/v1/departments/{id}	Update Department
+DELETE	/api/v1/departments/{id}	Archive Department
+Example Request
+POST /api/v1/departments
+{
+    "departmentCode":"CSE",
+    "departmentName":"Computer Science and Engineering"
+}
+## Database Tables
+department
+change_log
+
+## 2. Batch APIs
+Method	Endpoint
+POST	/api/v1/batches
+GET	/api/v1/batches
+GET	/api/v1/batches/{id}
+PUT	/api/v1/batches/{id}
+DELETE	/api/v1/batches/{id}
+
+Example
+
+{
+    "batchCode":"CSE-2024-A",
+    "departmentId":"...",
+    "semester":5,
+    "section":"A"
+}
+## Database Tables
+batch
+department
+change_log
+
+## 3. Faculty APIs
+Method	Endpoint
+POST	/api/v1/faculties
+GET	/api/v1/faculties
+GET	/api/v1/faculties/{id}
+PUT	/api/v1/faculties/{id}
+DELETE	/api/v1/faculties/{id}
+
+Example
+
+{
+    "employeeId":"PECF001",
+    "fullName":"Dr. Sharma",
+    "email":"sharma@pec.edu.in",
+    "departmentId":"..."
+}
+## Database Tables
+faculty
+department
+change_log
+## 4. Subject APIs
+Method	Endpoint
+POST	/api/v1/subjects
+GET	/api/v1/subjects
+GET	/api/v1/subjects/{id}
+PUT	/api/v1/subjects/{id}
+DELETE	/api/v1/subjects/{id}
+
+Example
+
+{
+    "subjectCode":"CS301",
+    "subjectName":"Data Structures",
+    "credits":4,
+    "departmentId":"..."
+}
+## Database Tables
+subject
+department
+change_log
+
+## 5. Room APIs
+Method	Endpoint
+POST	/api/v1/rooms
+GET	/api/v1/rooms
+GET	/api/v1/rooms/{id}
+PUT	/api/v1/rooms/{id}
+DELETE	/api/v1/rooms/{id}
+
+Example
+
+{
+    "roomNumber":"LH101",
+    "building":"Academic Block",
+    "capacity":80
+}
+## Database Tables
+room
+change_log
+
+## 6. Academic Calendar APIs
+Method	Endpoint
+POST	/api/v1/academic-calendar
+GET	/api/v1/academic-calendar
+GET	/api/v1/academic-calendar/{id}
+PUT	/api/v1/academic-calendar/{id}
+DELETE	/api/v1/academic-calendar/{id}
+
+Example
+
+{
+    "calendarDate":"2026-07-15",
+    "isWorkingDay":true,
+    "academicYear":"2026-27"
+}
+## Database Tables
+academic_calendar
+change_log
+
+## 7. Admin User APIs
+Method	Endpoint
+POST	/api/v1/admin-users
+GET	/api/v1/admin-users
+GET	/api/v1/admin-users/{id}
+PUT	/api/v1/admin-users/{id}
+DELETE	/api/v1/admin-users/{id}
+PUT	/api/v1/admin-users/{id}/role
+PUT	/api/v1/admin-users/{id}/status
+
+Example
+
+{
+    "employeeId":"PECADM001",
+    "fullName":"Dr. Anjali Sharma",
+    "email":"admin@pec.edu.in",
+    "role":"SUPER_ADMIN"
+}
+## Database Tables
+admin_user
+change_log
