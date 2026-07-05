@@ -2468,3 +2468,299 @@ Only SUPER_ADMIN can reopen archived or resolved conflicts.
 All conflict actions are recorded in the ChangeLog.
 Conflict records are retained for audit purposes.
 
+## Conflict Resolution Workflow
+Attendance Recorded
+        │
+        ▼
+Validation Engine
+        │
+        ▼
+Conflict Detected
+        │
+        ▼
+Conflict Table
+        │
+        ▼
+Dashboard Alert
+        │
+        ▼
+Administrator Reviews Conflict
+        │
+        ├────────► Resolve
+        │
+        ├────────► Manual Attendance Update
+        │
+        └────────► Reopen (if required)
+        │
+        ▼
+Update ChangeLog
+
+# 11.Notification Module
+## Module Overview
+
+The Notification module manages all system-generated and administrator-generated notifications in the FaceGate platform.
+
+Notifications are used to alert administrators about important events, including attendance sessions, synchronization issues, conflicts, device status changes, holidays, and system announcements.
+
+All Notification APIs require administrator authentication.
+
+## 1. Get All Notifications
+## Endpoint
+GET /api/v1/notifications
+## Description
+Returns all notifications for the authenticated administrator.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Headers
+Header	Value
+Authorization	Bearer <JWT_TOKEN>
+## Query Parameters
+Parameter	Required	Description
+page	No	Page number
+limit	No	Records per page
+isRead	No	true / false
+priority	No	LOW, MEDIUM, HIGH, CRITICAL
+type	No	Notification category
+Example
+GET /api/v1/notifications?isRead=false
+## Success Response
+200 OK
+{
+  "success": true,
+  "page": 1,
+  "total": 24,
+  "notifications": [
+    {
+      "id": "not-001",
+      "title": "Device Offline",
+      "message": "Room 101 Tablet has not synchronized for 30 minutes.",
+      "priority": "HIGH",
+      "type": "DEVICE",
+      "isRead": false,
+      "createdAt": "2026-07-15T11:20:00Z"
+    }
+  ]
+}
+## Database Tables Used
+notification
+admin_user
+
+## Business Logic
+Return notifications of logged-in administrator.
+Sort newest first.
+Support pagination.
+## 2. Get Notification Details
+## Endpoint
+GET /api/v1/notifications/{notificationId}
+## Description
+Returns complete details of one notification.
+
+## Success Response
+{
+  "success": true,
+  "data": {
+    "id": "not-001",
+    "title": "Device Offline",
+    "message": "Room 101 Tablet has not synchronized for 30 minutes.",
+    "priority": "HIGH",
+    "type": "DEVICE",
+    "isRead": false,
+    "createdAt": "2026-07-15T11:20:00Z"
+  }
+}
+## Database Tables Used
+notification
+## 3. Create Notification
+## Endpoint
+POST /api/v1/notifications
+## Description
+Creates a new notification.
+Used for announcements or manual administrator messages.
+
+## Authentication
+Bearer Token Required (Super Admin)
+
+## Request Body
+{
+  "title":"Server Maintenance",
+  "message":"The FaceGate server will undergo maintenance tonight at 10 PM.",
+  "notificationType":"SYSTEM",
+  "priority":"HIGH",
+  "recipientId":"6b84fd91-a4c5-48d7-b1c2-8d43aefb4c10"
+}
+## Success Response
+201 Created
+{
+  "success": true,
+  "message": "Notification created successfully."
+}
+## Database Tables Used
+notification
+admin_user
+change_log
+
+## Business Logic
+Validate recipient.
+Store notification.
+Record creation in ChangeLog.
+## 4. Mark Notification as Read
+## Endpoint
+PUT /api/v1/notifications/{notificationId}/read
+## Description
+Marks a notification as read.
+
+## Success Response
+200 OK
+{
+  "success": true,
+  "message": "Notification marked as read."
+}
+## Database Tables Used
+notification
+Business Logic
+Update is_read = true.
+
+## 5. Mark All Notifications as Read
+## Endpoint
+PUT /api/v1/notifications/read-all
+## Description
+Marks all unread notifications of the logged-in administrator as read.
+
+## Success Response
+{
+  "success": true,
+  "message": "All notifications marked as read."
+}
+## Database Tables Used
+notification
+
+## 6. Delete Notification
+## Endpoint
+DELETE /api/v1/notifications/{notificationId}
+## Description
+Archives a notification.
+
+## Success Response
+{
+    "success": true,
+    "message": "Notification archived successfully."
+}
+## Database Tables Used
+notification
+change_log
+
+## Business Logic
+Instead of deleting
+is_active = false
+
+## 7. Get Unread Notification Count
+## Endpoint
+GET /api/v1/notifications/unread-count
+## Description
+Returns unread notification count.
+
+## Success Response
+{
+    "success": true,
+    "count": 8
+}
+## Database Tables Used
+notification
+
+## 8. Broadcast Notification
+## Endpoint
+POST /api/v1/notifications/broadcast
+## Description
+Sends a notification to all administrators.
+
+## Authentication
+SUPER_ADMIN Only
+
+## Request Body
+{
+    "title":"Holiday Announcement",
+    "message":"Tomorrow is declared a holiday.",
+    "priority":"MEDIUM",
+    "notificationType":"HOLIDAY"
+}
+## Success Response
+201 Created
+{
+    "success": true,
+    "message":"Notification broadcast successfully."
+}
+## Database Tables Used
+notification
+admin_user
+change_log
+
+## Business Logic
+Retrieve all active administrators.
+Create notification for each administrator.
+Log broadcast operation.
+## Notification Types
+SYSTEM
+
+ATTENDANCE
+
+DEVICE
+
+CONFLICT
+
+SYNC
+
+HOLIDAY
+
+TIMETABLE
+
+SECURITY
+
+ANNOUNCEMENT
+
+## Priority Levels
+LOW
+
+MEDIUM
+
+HIGH
+
+CRITICAL
+
+## Notification API Summary
+Method	Endpoint	Description
+GET	/api/v1/notifications	Get All Notifications
+GET	/api/v1/notifications/{id}	Notification Details
+POST	/api/v1/notifications	Create Notification
+PUT	/api/v1/notifications/{id}/read	Mark as Read
+PUT	/api/v1/notifications/read-all	Mark All as Read
+DELETE	/api/v1/notifications/{id}	Archive Notification
+GET	/api/v1/notifications/unread-count	Unread Count
+POST	/api/v1/notifications/broadcast	Broadcast Notification
+
+## Security
+Only authenticated administrators can access notifications.
+Only SUPER_ADMIN can broadcast notifications.
+Users can only view their own notifications unless they have elevated privileges.
+All notification creation, deletion, and broadcast operations are recorded in the ChangeLog.
+
+## Notification Workflow
+System Event
+      │
+      ▼
+Notification Generated
+      │
+      ▼
+Notification Table
+      │
+      ▼
+Dashboard Notification Panel
+      │
+      ├────────► Administrator Reads
+      │
+      ├────────► Mark as Read
+      │
+      └────────► Archive Notification
+
+      
