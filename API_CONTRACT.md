@@ -2763,4 +2763,256 @@ Dashboard Notification Panel
       │
       └────────► Archive Notification
 
-      
+# 12. Holiday Module
+## Module Overview
+
+The Holiday module manages institutional, national, and emergency holidays within the FaceGate system.
+
+Holiday information is used by the Attendance Session service to prevent attendance generation on non-working days. The module also synchronizes holiday data with Android devices to ensure offline attendance behaves consistently.
+
+All Holiday APIs require administrator authentication unless otherwise specified.
+
+## 1. Create Holiday
+## Endpoint
+POST /api/v1/holidays
+## Description
+Creates a new holiday.
+
+## Authentication
+Bearer Token Required (Admin Only)
+
+## Headers
+Header	Value
+Authorization	Bearer <JWT_TOKEN>
+Content-Type	application/json
+## Request Body
+{
+  "calendarId":"c12e5a91-8b34-4f0e-9d61-5d6f87d3b2c8",
+  "holidayName":"Independence Day",
+  "holidayType":"NATIONAL",
+  "description":"National Holiday",
+  "holidayDate":"2026-08-15",
+  "isRecurring":true
+}
+## Validation Rules
+Field	Validation
+calendarId	Must exist
+holidayName	Required
+holidayDate	Required
+holidayType	Valid Enum
+## Success Response
+201 Created
+{
+    "success":true,
+    "message":"Holiday created successfully."
+}
+## Error Response
+409 Conflict
+{
+    "success":false,
+    "message":"Holiday already exists."
+}
+## Database Tables Used
+holiday
+academic_calendar
+admin_user
+change_log
+
+## Business Logic
+Verify calendar exists.
+Ensure duplicate holiday does not exist.
+Save holiday.
+Update Academic Calendar.
+Record ChangeLog.
+
+## 2. Get All Holidays
+## Endpoint
+GET /api/v1/holidays
+## Description
+Returns all holidays.
+
+## Query Parameters
+Parameter	Description
+year	Academic Year
+type	Holiday Type
+page	Page Number
+limit	Records Per Page
+## Success Response
+{
+  "success":true,
+  "holidays":[
+      {
+          "holidayName":"Independence Day",
+          "date":"2026-08-15",
+          "type":"NATIONAL"
+      }
+  ]
+}
+## Database Tables Used
+holiday
+
+## 3. Get Holiday Details
+## Endpoint
+GET /api/v1/holidays/{holidayId}
+## Description
+Returns detailed information about a holiday.
+
+## Success Response
+{
+  "success":true,
+  "data":{
+      "holidayName":"Independence Day",
+      "description":"National Holiday",
+      "holidayType":"NATIONAL",
+      "date":"2026-08-15"
+  }
+}
+## Database Tables Used
+holiday
+
+## 4. Update Holiday
+## Endpoint
+PUT /api/v1/holidays/{holidayId}
+## Description
+Updates an existing holiday.
+
+## Request Body
+{
+    "description":"National Holiday Celebration"
+}
+## Success Response
+200 OK
+{
+    "success":true,
+    "message":"Holiday updated successfully."
+}
+## Database Tables Used
+holiday
+change_log
+
+## Business Logic
+Update holiday.
+Synchronize changes.
+Record ChangeLog.
+
+## 5. Delete Holiday
+## Endpoint
+DELETE /api/v1/holidays/{holidayId}
+## Description
+Archives a holiday.
+
+## Success Response
+{
+    "success":true,
+    "message":"Holiday removed successfully."
+}
+## Database Tables Used
+holiday
+change_log
+
+## Business Logic
+Instead of deleting
+is_active = false
+
+## 6. Get Upcoming Holidays
+## Endpoint
+GET /api/v1/holidays/upcoming
+## Description
+Returns upcoming holidays.
+
+## Success Response
+{
+    "success":true,
+    "holidays":[
+        {
+            "holidayName":"Independence Day",
+            "date":"2026-08-15",
+            "daysRemaining":30
+        }
+    ]
+}
+## Database Tables Used
+holiday
+
+## 7. Holiday Synchronization
+## Endpoint
+GET /api/v1/holidays/sync
+## Description
+Returns holiday updates for Android devices.
+
+## Authentication
+Device Token Required
+
+## Query Parameters
+Parameter	Description
+lastSync	Return holidays updated after last synchronization
+## Success Response
+{
+    "success":true,
+    "count":5,
+    "holidays":[
+        {
+            "holidayName":"Independence Day",
+            "date":"2026-08-15"
+        }
+    ]
+}
+## Database Tables Used
+holiday
+device_sync_log
+
+## Business Logic
+Return only new or modified holidays.
+Record synchronization.
+## Holiday Types
+NATIONAL
+
+GAZETTED
+
+INSTITUTIONAL
+
+FESTIVAL
+
+EMERGENCY
+
+## Holiday API Summary
+Method	Endpoint	Description
+POST	/api/v1/holidays	Create Holiday
+GET	/api/v1/holidays	Get All Holidays
+GET	/api/v1/holidays/{id}	Holiday Details
+PUT	/api/v1/holidays/{id}	Update Holiday
+DELETE	/api/v1/holidays/{id}	Archive Holiday
+GET	/api/v1/holidays/upcoming	Upcoming Holidays
+GET	/api/v1/holidays/sync	Holiday Synchronization
+
+## Security
+Only administrators can create, update, or archive holidays.
+Android devices can only access the synchronization endpoint using a valid Device Token.
+Holiday changes are recorded in the ChangeLog.
+Synchronization events are recorded in the DeviceSyncLog.
+Attendance session generation checks the Holiday table before creating new sessions.
+
+## Holiday Workflow
+Administrator
+      │
+      ▼
+Create / Update Holiday
+      │
+      ▼
+Holiday Table Updated
+      │
+      ▼
+Academic Calendar Updated
+      │
+      ▼
+Attendance Session Generator
+      │
+      ▼
+Skip Session Generation
+      │
+      ▼
+Holiday Sync API
+      │
+      ▼
+Android Devices Updated
+
