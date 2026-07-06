@@ -1,0 +1,38 @@
+{
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.2.0",
+    "morgan": "^1.11.0",
+    "pg": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/morgan": "^1.9.10",
+    "@types/node": "^26.1.0",
+    "@types/pg": "^8.20.0",
+    "nodemon": "^3.1.14",
+    "ts-node": "^10.9.2",
+    "typescript": "^6.0.3"
+  },
+  "name": "facegate-backend",
+  "version": "1.0.0",
+  "description": "FaceGate is an AI-powered face recognition attendance management system designed for educational institutions. It provides an offline-first Android application for attendance marking, a centralized backend for synchronization and data management, and a web dashboard for administration, reporting, and live monitoring.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yashkrishangupta/facegate-backend.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yashkrishangupta/facegate-backend/issues"
+  },
+  "homepage": "https://github.com/yashkrishangupta/facegate-backend#readme"
+}

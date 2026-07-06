@@ -33,7 +33,7 @@ export const getStudentById = async (
 
     try {
 
-        const { studentId } = req.params;
+        const studentId = req.params.studentId as string;
 
         const student = await StudentService.getStudentById(studentId);
 
@@ -69,7 +69,7 @@ export const getStudentsByBatch = async (
 
     try {
 
-        const { batchId } = req.params;
+        const batchId = req.params.batchId as string;
 
         const students = await StudentService.getStudentsByBatch(batchId);
 
@@ -124,7 +124,7 @@ export const updateStudent = async (
 
     try {
 
-        const { studentId } = req.params;
+        const studentId = req.params.studentId as string;
 
         const updatedStudent =
             await StudentService.updateStudent(studentId, req.body);
@@ -154,7 +154,7 @@ export const deleteStudent = async (
 
     try {
 
-        const { studentId } = req.params;
+        const studentId = req.params.studentId as string;
 
         await StudentService.deleteStudent(studentId);
 
