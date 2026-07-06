@@ -100,13 +100,7 @@ CREATE TABLE batch (
         FOREIGN KEY (department_id)
         REFERENCES department(department_id)
         ON DELETE RESTRICT
-        ON UPDATE CASCADE,
-
-    CONSTRAINT fk_batch_advisor
-    FOREIGN KEY (batch_advisor_id)
-    REFERENCES faculty(faculty_id)
-    ON DELETE SET NULL
-    ON UPDATE CASCADE,            
+        ON UPDATE CASCADE,          
 
     CONSTRAINT chk_program
         CHECK (
@@ -178,6 +172,12 @@ CREATE TABLE faculty (
         )
 
 );
+ALTER TABLE batch
+ADD CONSTRAINT fk_batch_advisor
+FOREIGN KEY (batch_advisor_id)
+REFERENCES faculty(faculty_id)
+ON DELETE SET NULL
+ON UPDATE CASCADE;
 
 -- ==========================================================
 -- TABLE: Subject
@@ -395,8 +395,6 @@ CREATE TABLE student (
 
     admission_year INTEGER NOT NULL,
 
-    current_semester INTEGER NOT NULL,
-
     profile_photo_url TEXT,
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -436,7 +434,7 @@ CREATE TABLE student (
         CHECK (
             email IS NULL
             OR email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
-        )
+        ),
 
     CONSTRAINT chk_student_status
 CHECK (
@@ -446,7 +444,7 @@ CHECK (
         'SUSPENDED',
         'DROPPED'
     )
-),    
+)   
 
 );
 
@@ -536,7 +534,7 @@ CREATE TABLE timetable (
     CONSTRAINT chk_time
         CHECK (
             start_time < end_time
-        )
+        ),
 
     CONSTRAINT uq_timetable_slot
 UNIQUE (
@@ -585,13 +583,6 @@ CREATE TABLE attendance_session (
     attendance_mode VARCHAR(20)
 NOT NULL DEFAULT 'FACE_RECOGNITION',
 
-
-    CONSTRAINT fk_session_calendar
-        FOREIGN KEY (calendar_id)
-        REFERENCES academic_calendar(calendar_id)
-        ON DELETE RESTRICT
-        ON UPDATE CASCADE,
-
     CONSTRAINT chk_session_status
         CHECK (
             session_status IN (
@@ -623,7 +614,7 @@ CHECK (
     CONSTRAINT chk_session_time
         CHECK (
             start_time < end_time
-        )
+        ),
     CONSTRAINT uq_session_per_day
 UNIQUE (
     timetable_id,
@@ -791,10 +782,6 @@ NOT NULL DEFAULT 'VERIFIED',
                 'EXCUSED'
             )
         ),
-    CONSTRAINT fk_attendance_device
-    FOREIGN KEY (device_id)
-    REFERENCES device(device_id)    
-
     CONSTRAINT chk_attendance_mode
         CHECK (
             attendance_mode IN (
@@ -818,11 +805,7 @@ NOT NULL DEFAULT 'VERIFIED',
             attendance_session_id,
             student_id
         )
-    CONSTRAINT uq_student_session
-UNIQUE (
-    attendance_session_id,
-    student_id
-)   
+      
 CONSTRAINT chk_verification_status
 CHECK (
     verification_status IN (
@@ -997,13 +980,7 @@ CREATE TABLE holiday (
         FOREIGN KEY (calendar_id)
         REFERENCES academic_calendar(calendar_id)
         ON DELETE CASCADE
-        ON UPDATE CASCADE,
-
-    CONSTRAINT fk_holiday_admin
-FOREIGN KEY (created_by)
-REFERENCES admin_user(admin_id)
-ON DELETE SET NULL
-ON UPDATE CASCADE,    
+        ON UPDATE CASCADE,    
 
     CONSTRAINT chk_holiday_type
         CHECK (
@@ -1072,19 +1049,7 @@ CREATE TABLE notification (
                 'HIGH',
                 'CRITICAL'
             )
-        )
-
-    CONSTRAINT fk_notification_admin
-FOREIGN KEY (admin_id)
-REFERENCES admin_user(admin_id)
-ON DELETE CASCADE
-ON UPDATE CASCADE,
-
-CONSTRAINT fk_notification_creator
-FOREIGN KEY (created_by)
-REFERENCES admin_user(admin_id)
-ON DELETE SET NULL
-ON UPDATE CASCADE,    
+        ),    
 
 );
 
@@ -1179,7 +1144,7 @@ CREATE TABLE conflict (
                 'RESOLVED',
                 'REJECTED'
             )
-        )
+        ),
 
         CONSTRAINT fk_conflict_resolved_by
     FOREIGN KEY (resolved_by)
@@ -1255,6 +1220,22 @@ CREATE TABLE admin_user (
         )
 
 );
+ALTER TABLE holiday
+ADD CONSTRAINT fk_holiday_admin
+FOREIGN KEY (created_by)
+REFERENCES admin_user(admin_id)
+ON DELETE SET NULL
+ON UPDATE CASCADE;
+
+ALTER TABLE notification
+ADD CONSTRAINT fk_notification_admin
+FOREIGN KEY (admin_id)
+REFERENCES admin_user(admin_id);
+
+ALTER TABLE notification
+ADD CONSTRAINT fk_notification_creator
+FOREIGN KEY (created_by)
+REFERENCES admin_user(admin_id);
 
 -- ==========================================================
 -- TABLE: Change Log
