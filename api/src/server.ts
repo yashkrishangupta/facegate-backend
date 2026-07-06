@@ -12,7 +12,8 @@ import timetableRoutes from "./routes/timetable";
 import deviceRoutes from "./routes/devices";
 import holidayRoutes from "./routes/holidays";
 import conflictRoutes from "./routes/conflicts";
-import notificationRoutes from "./routes/notifications";
+import notificationRoutes from "./routes/notification";
+import dashboardRoutes from "./routes/dashboard";
 const app = express();
 
 app.use(cors());
@@ -36,6 +37,7 @@ app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/holidays", holidayRoutes);
 app.use("/api/v1/conflicts", conflictRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
+app.use("/api/v1/dashboard", dashboardRoutes);
 
 const PORT = process.env.PORT || 5000;
 
