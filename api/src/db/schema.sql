@@ -631,6 +631,99 @@ UNIQUE (
 )    
 
 );
+-- ==========================================================
+-- TABLE: Device
+-- Description: Stores registered FaceGate Android devices.
+-- ==========================================================
+
+CREATE TABLE device (
+
+    device_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    room_id UUID NOT NULL,
+
+    device_identifier VARCHAR(100) NOT NULL UNIQUE,
+
+    device_name VARCHAR(100) NOT NULL,
+
+    device_type VARCHAR(30) NOT NULL DEFAULT 'ANDROID_TABLET',
+
+    app_version VARCHAR(20) NOT NULL,
+
+    operating_system VARCHAR(50),
+
+    device_token UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+
+    registration_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    last_heartbeat TIMESTAMP,
+
+    last_sync TIMESTAMP,
+
+    battery_percentage INTEGER,
+
+    storage_available_mb INTEGER,
+
+    network_status VARCHAR(20) NOT NULL DEFAULT 'OFFLINE',
+
+    device_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_device_room
+        FOREIGN KEY (room_id)
+        REFERENCES room(room_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT chk_device_type
+        CHECK (
+            device_type IN (
+                'ANDROID_TABLET',
+                'ANDROID_PHONE'
+            )
+        ),
+
+    CONSTRAINT chk_network_status
+        CHECK (
+            network_status IN (
+                'ONLINE',
+                'OFFLINE'
+            )
+        ),
+
+    CONSTRAINT chk_device_status
+        CHECK (
+            device_status IN (
+                'ACTIVE',
+                'INACTIVE',
+                'MAINTENANCE',
+                'LOST'
+            )
+        ),
+
+    CONSTRAINT chk_battery
+        CHECK (
+            battery_percentage IS NULL
+            OR (
+                battery_percentage >= 0
+                AND battery_percentage <= 100
+            )
+        ),
+
+    CONSTRAINT chk_storage
+        CHECK (
+            storage_available_mb IS NULL
+            OR storage_available_mb >= 0
+        )
+
+);
+
+
 
 -- ==========================================================
 -- TABLE: Attendance
@@ -698,6 +791,9 @@ NOT NULL DEFAULT 'VERIFIED',
                 'EXCUSED'
             )
         ),
+    CONSTRAINT fk_attendance_device
+    FOREIGN KEY (device_id)
+    REFERENCES device(device_id)    
 
     CONSTRAINT chk_attendance_mode
         CHECK (
@@ -737,3 +833,587 @@ CHECK (
 ), 
 
 );
+
+-- ==========================================================
+-- TABLE: Face Embedding
+-- Description: Stores AI-generated face embeddings for students.
+-- ==========================================================
+
+CREATE TABLE face_embedding (
+
+    embedding_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    student_id UUID NOT NULL,
+
+    embedding_version VARCHAR(20) NOT NULL DEFAULT 'v1.0',
+
+    embedding_data JSONB NOT NULL,
+
+    model_name VARCHAR(100) NOT NULL,
+
+    confidence_threshold DECIMAL(5,2) NOT NULL DEFAULT 75.00,
+
+    embedding_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+
+    enrolled_on TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    last_updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_embedding_student
+        FOREIGN KEY (student_id)
+        REFERENCES student(student_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT uq_student_embedding
+        UNIQUE(student_id),
+
+    CONSTRAINT chk_embedding_status
+        CHECK (
+            embedding_status IN (
+                'ACTIVE',
+                'INACTIVE',
+                'REVOKED'
+            )
+        ),
+
+    CONSTRAINT chk_confidence_threshold
+        CHECK (
+            confidence_threshold BETWEEN 0 AND 100
+        )
+
+);
+
+-- ==========================================================
+-- TABLE: Device Sync Log
+-- Description: Stores synchronization history of Android devices.
+-- ==========================================================
+
+CREATE TABLE device_sync_log (
+
+    sync_log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    device_id UUID NOT NULL,
+
+    sync_type VARCHAR(30) NOT NULL,
+
+    sync_status VARCHAR(20) NOT NULL,
+
+    sync_start_time TIMESTAMP NOT NULL,
+
+    sync_end_time TIMESTAMP,
+
+    records_uploaded INTEGER NOT NULL DEFAULT 0,
+
+    records_downloaded INTEGER NOT NULL DEFAULT 0,
+
+    failed_records INTEGER NOT NULL DEFAULT 0,
+
+    error_message TEXT,
+
+    app_version VARCHAR(20),
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_sync_device
+        FOREIGN KEY (device_id)
+        REFERENCES device(device_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT chk_sync_type
+        CHECK (
+            sync_type IN (
+                'FULL',
+                'INCREMENTAL',
+                'ATTENDANCE_UPLOAD',
+                'HEARTBEAT',
+                'HOLIDAY_SYNC',
+                'TIMETABLE_SYNC',
+                'STUDENT_SYNC',
+                'FACE_SYNC'
+            )
+        ),
+
+    CONSTRAINT chk_sync_status
+        CHECK (
+            sync_status IN (
+                'SUCCESS',
+                'FAILED',
+                'PARTIAL',
+                'IN_PROGRESS'
+            )
+        ),
+
+    CONSTRAINT chk_uploaded
+        CHECK (records_uploaded >= 0),
+
+    CONSTRAINT chk_downloaded
+        CHECK (records_downloaded >= 0),
+
+    CONSTRAINT chk_failed
+        CHECK (failed_records >= 0)
+
+);
+
+-- ==========================================================
+-- TABLE: Holiday
+-- Description: Stores holiday information.
+-- ==========================================================
+
+CREATE TABLE holiday (
+
+    holiday_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    calendar_id UUID NOT NULL,
+
+    holiday_name VARCHAR(100) NOT NULL,
+
+    holiday_type VARCHAR(30) NOT NULL,
+
+    description TEXT,
+
+    is_recurring BOOLEAN NOT NULL DEFAULT FALSE,
+
+    created_by UUID,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_holiday_calendar
+        FOREIGN KEY (calendar_id)
+        REFERENCES academic_calendar(calendar_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_holiday_admin
+FOREIGN KEY (created_by)
+REFERENCES admin_user(admin_id)
+ON DELETE SET NULL
+ON UPDATE CASCADE,    
+
+    CONSTRAINT chk_holiday_type
+        CHECK (
+            holiday_type IN (
+                'NATIONAL',
+                'INSTITUTIONAL',
+                'FESTIVAL',
+                'EMERGENCY',
+                'GAZETTED'
+            )
+        )
+
+);
+
+-- ==========================================================
+-- TABLE: Notification
+-- Description: Stores system and administrator notifications.
+-- ==========================================================
+
+CREATE TABLE notification (
+
+    notification_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    admin_id UUID,
+
+    title VARCHAR(150) NOT NULL,
+
+    message TEXT NOT NULL,
+
+    notification_type VARCHAR(30) NOT NULL,
+
+    priority VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+
+    read_at TIMESTAMP,
+
+    created_by UUID,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN DEFAULT TRUE,
+
+    CONSTRAINT chk_notification_type
+        CHECK (
+            notification_type IN (
+                'SYSTEM',
+                'ATTENDANCE',
+                'DEVICE',
+                'CONFLICT',
+                'SYNC',
+                'HOLIDAY',
+                'TIMETABLE',
+                'SECURITY',
+                'ANNOUNCEMENT'
+            )
+        ),
+
+    CONSTRAINT chk_priority
+        CHECK (
+            priority IN (
+                'LOW',
+                'MEDIUM',
+                'HIGH',
+                'CRITICAL'
+            )
+        )
+
+    CONSTRAINT fk_notification_admin
+FOREIGN KEY (admin_id)
+REFERENCES admin_user(admin_id)
+ON DELETE CASCADE
+ON UPDATE CASCADE,
+
+CONSTRAINT fk_notification_creator
+FOREIGN KEY (created_by)
+REFERENCES admin_user(admin_id)
+ON DELETE SET NULL
+ON UPDATE CASCADE,    
+
+);
+
+-- ==========================================================
+-- TABLE: Conflict
+-- Description: Stores attendance and synchronization conflicts.
+-- ==========================================================
+
+CREATE TABLE conflict (
+
+    conflict_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    attendance_id UUID,
+
+    attendance_session_id UUID NOT NULL,
+
+    student_id UUID,
+
+    device_id UUID,
+
+    conflict_type VARCHAR(30) NOT NULL,
+
+    severity VARCHAR(20) NOT NULL DEFAULT 'MEDIUM',
+
+    conflict_status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+
+    description TEXT,
+
+    resolution_notes TEXT,
+
+    resolved_by UUID,
+
+    resolved_at TIMESTAMP,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT fk_conflict_attendance
+        FOREIGN KEY (attendance_id)
+        REFERENCES attendance(attendance_id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_conflict_session
+        FOREIGN KEY (attendance_session_id)
+        REFERENCES attendance_session(attendance_session_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_conflict_student
+        FOREIGN KEY (student_id)
+        REFERENCES student(student_id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_conflict_device
+        FOREIGN KEY (device_id)
+        REFERENCES device(device_id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+
+    CONSTRAINT chk_conflict_type
+        CHECK (
+            conflict_type IN (
+                'LOW_CONFIDENCE',
+                'DUPLICATE_ATTENDANCE',
+                'SYNC_FAILURE',
+                'MANUAL_REVIEW',
+                'DEVICE_ERROR',
+                'UNKNOWN_FACE'
+            )
+        ),
+
+    CONSTRAINT chk_conflict_severity
+        CHECK (
+            severity IN (
+                'LOW',
+                'MEDIUM',
+                'HIGH',
+                'CRITICAL'
+            )
+        ),
+
+    CONSTRAINT chk_conflict_status
+        CHECK (
+            conflict_status IN (
+                'PENDING',
+                'UNDER_REVIEW',
+                'RESOLVED',
+                'REJECTED'
+            )
+        )
+
+        CONSTRAINT fk_conflict_resolved_by
+    FOREIGN KEY (resolved_by)
+    REFERENCES admin_user(admin_id)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE,
+
+);
+
+-- ==========================================================
+-- TABLE: Admin User
+-- Description: Stores administrator accounts for FaceGate.
+-- ==========================================================
+
+CREATE TABLE admin_user (
+
+    admin_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    employee_id VARCHAR(20) NOT NULL UNIQUE,
+
+    first_name VARCHAR(50) NOT NULL,
+
+    last_name VARCHAR(50) NOT NULL,
+
+    email VARCHAR(100) NOT NULL UNIQUE,
+
+    password_hash TEXT NOT NULL,
+
+    role VARCHAR(30) NOT NULL DEFAULT 'ADMIN',
+
+    phone VARCHAR(15),
+
+    last_login TIMESTAMP,
+
+    account_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+
+    failed_login_attempts INTEGER NOT NULL DEFAULT 0,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT chk_admin_role
+        CHECK (
+            role IN (
+                'SUPER_ADMIN',
+                'ADMIN',
+                'FACULTY',
+                'VIEWER'
+            )
+        ),
+
+    CONSTRAINT chk_account_status
+        CHECK (
+            account_status IN (
+                'ACTIVE',
+                'LOCKED',
+                'SUSPENDED',
+                'DISABLED'
+            )
+        ),
+
+    CONSTRAINT chk_failed_attempts
+        CHECK (
+            failed_login_attempts >= 0
+        ),
+
+    CONSTRAINT chk_admin_email
+        CHECK (
+            email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
+        )
+
+);
+
+-- ==========================================================
+-- TABLE: Change Log
+-- Description: Stores audit logs for all important system actions.
+-- ==========================================================
+
+CREATE TABLE change_log (
+
+    change_log_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    admin_id UUID,
+
+    entity_name VARCHAR(50) NOT NULL,
+
+    entity_id UUID,
+
+    action VARCHAR(20) NOT NULL,
+
+    old_values JSONB,
+
+    new_values JSONB,
+
+    ip_address VARCHAR(45),
+
+    user_agent TEXT,
+
+    action_timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    remarks TEXT,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_change_log_admin
+        FOREIGN KEY (admin_id)
+        REFERENCES admin_user(admin_id)
+        ON DELETE SET NULL
+        ON UPDATE CASCADE,
+
+    CONSTRAINT chk_action
+        CHECK (
+            action IN (
+                'CREATE',
+                'UPDATE',
+                'DELETE',
+                'LOGIN',
+                'LOGOUT',
+                'SYNC',
+                'RESOLVE',
+                'EXPORT'
+            )
+        )
+
+);
+
+-- ==========================================================
+-- INDEXES
+-- ==========================================================
+
+-- Department
+CREATE INDEX idx_department_code
+ON department(department_code);
+
+-- Batch
+CREATE INDEX idx_batch_department
+ON batch(department_id);
+
+CREATE INDEX idx_batch_code
+ON batch(batch_code);
+
+-- Faculty
+CREATE INDEX idx_faculty_department
+ON faculty(department_id);
+
+CREATE INDEX idx_faculty_employee
+ON faculty(employee_id);
+
+-- Subject
+CREATE INDEX idx_subject_department
+ON subject(department_id);
+
+CREATE INDEX idx_subject_code
+ON subject(subject_code);
+
+-- Student
+CREATE INDEX idx_student_batch
+ON student(batch_id);
+
+CREATE INDEX idx_student_roll
+ON student(roll_number);
+
+CREATE INDEX idx_student_registration
+ON student(registration_number);
+
+-- Timetable
+CREATE INDEX idx_timetable_batch
+ON timetable(batch_id);
+
+CREATE INDEX idx_timetable_faculty
+ON timetable(faculty_id);
+
+CREATE INDEX idx_timetable_room
+ON timetable(room_id);
+
+-- Attendance Session
+CREATE INDEX idx_session_date
+ON attendance_session(session_date);
+
+CREATE INDEX idx_session_timetable
+ON attendance_session(timetable_id);
+
+-- Attendance
+CREATE INDEX idx_attendance_student
+ON attendance(student_id);
+
+CREATE INDEX idx_attendance_session
+ON attendance(attendance_session_id);
+
+CREATE INDEX idx_attendance_time
+ON attendance(attendance_time);
+
+-- Face Embedding
+CREATE INDEX idx_embedding_student
+ON face_embedding(student_id);
+
+-- Device
+CREATE INDEX idx_device_room
+ON device(room_id);
+
+CREATE INDEX idx_device_identifier
+ON device(device_identifier);
+
+-- Device Sync Log
+CREATE INDEX idx_sync_device
+ON device_sync_log(device_id);
+
+CREATE INDEX idx_sync_time
+ON device_sync_log(sync_start_time);
+
+-- Holiday
+CREATE INDEX idx_holiday_calendar
+ON holiday(calendar_id);
+
+-- Notification
+CREATE INDEX idx_notification_admin
+ON notification(admin_id);
+
+CREATE INDEX idx_notification_read
+ON notification(is_read);
+
+-- Conflict
+CREATE INDEX idx_conflict_status
+ON conflict(conflict_status);
+
+CREATE INDEX idx_conflict_student
+ON conflict(student_id);
+
+-- Change Log
+CREATE INDEX idx_change_admin
+ON change_log(admin_id);
+
+CREATE INDEX idx_change_entity
+ON change_log(entity_name);
