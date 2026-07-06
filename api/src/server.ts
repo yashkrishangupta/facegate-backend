@@ -13,6 +13,7 @@ import deviceRoutes from "./routes/devices";
 import holidayRoutes from "./routes/holidays";
 import conflictRoutes from "./routes/conflicts";
 import notificationRoutes from "./routes/notification";
+import adminRoutes from "./routes/admin";
 import dashboardRoutes from "./routes/dashboard";
 const app = express();
 
@@ -38,6 +39,7 @@ app.use("/api/v1/holidays", holidayRoutes);
 app.use("/api/v1/conflicts", conflictRoutes);
 app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
+app.use("/api/v1/admin", adminRoutes);
 
 const PORT = process.env.PORT || 5000;
 
