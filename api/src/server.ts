@@ -11,6 +11,7 @@ import attendanceRoutes from "./routes/attendance";
 import timetableRoutes from "./routes/timetable";
 import deviceRoutes from "./routes/devices";
 import holidayRoutes from "./routes/holidays";
+import conflictRoutes from "./routes/conflicts";
 
 const app = express();
 
@@ -33,6 +34,7 @@ app.use("/api/v1/attendance", attendanceRoutes);
 app.use("/api/v1/timetable", timetableRoutes);
 app.use("/api/v1/devices", deviceRoutes);
 app.use("/api/v1/holidays", holidayRoutes);
+app.use("/api/v1/conflicts", conflictRoutes);
 
 const PORT = process.env.PORT || 5000;
 
