@@ -1,3 +1,4 @@
+import { errorHandler } from "./middleware/errorHandler";
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -43,9 +44,13 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/reports", reportRoutes);
+// Error handler must be last
+app.use(errorHandler);
+
 
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
     console.log(` Server running on http://localhost:${PORT}`);
-});
+}
+);

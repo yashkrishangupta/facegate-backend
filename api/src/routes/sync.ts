@@ -1,3 +1,4 @@
+import { deviceAuth } from "../middleware/deviceAuth";
 import { Router } from "express";
 import {
     fullSync,
@@ -8,6 +9,7 @@ import {
 } from "../controllers/SyncController";
 
 const router = Router();
+router.use(deviceAuth);
 
 /**
  * Sync Routes
