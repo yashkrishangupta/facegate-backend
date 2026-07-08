@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { API_URL } from '../lib/config';
 
 export default function Home() {
   const [stats, setStats] = useState({
@@ -15,7 +16,7 @@ useEffect(() => {
   const fetchDashboard = async () => {
     try {
       const response = await fetch(
-        "http://localhost:5000/api/v1/dashboard/summary"
+        `${API_URL}/dashboard/summary`
       );
 
       const result = await response.json();
