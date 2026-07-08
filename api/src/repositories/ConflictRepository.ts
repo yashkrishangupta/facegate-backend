@@ -1,126 +1,109 @@
-/**
- * Mock Conflict Repository
- */
-
-let conflicts = [
-
-    {
-        conflictId: "C001",
-        attendanceId: "A001",
-        studentId: "S001",
-        conflictType: "LOW_CONFIDENCE",
-        description: "Face recognition confidence below threshold.",
-        status: "PENDING",
-        createdAt: "2026-07-06T09:05:00Z",
-        resolvedBy: null,
-        resolution: null
-    },
-
-    {
-        conflictId: "C002",
-        attendanceId: "A002",
-        studentId: "S002",
-        conflictType: "DUPLICATE_ATTENDANCE",
-        description: "Student attempted attendance twice.",
-        status: "PENDING",
-        createdAt: "2026-07-06T09:15:00Z",
-        resolvedBy: null,
-        resolution: null
-    },
-
-    {
-        conflictId: "C003",
-        attendanceId: null,
-        studentId: null,
-        conflictType: "UNKNOWN_FACE",
-        description: "Face not recognized in database.",
-        status: "RESOLVED",
-        createdAt: "2026-07-05T11:30:00Z",
-        resolvedBy: "ADMIN001",
-        resolution: "Ignored after manual verification."
-    }
-
-];
+import pool from "../config/database";
 
 /**
- * Get All Conflicts
+ * Conflict Repository
+ * Backed by the `conflict` table (ambiguous face matches / sync issues
+ * flagged for admin review).
  */
+
+const SELECT_CONFLICT = `
+    SELECT
+        c.conflict_id,
+        c.attendance_id,
+        c.attendance_session_id AS session_id,
+        c.student_id,
+        s.first_name || ' ' || s.last_name AS student_name,
+        c.device_id,
+        c.conflict_type,
+        c.severity,
+        c.conflict_status AS status,
+        c.description,
+        c.resolution_notes AS resolution,
+        c.resolved_by,
+        c.resolved_at,
+        c.created_at,
+        c.is_active
+    FROM conflict c
+    LEFT JOIN student s ON s.student_id = c.student_id
+`;
+
 export const getAllConflicts = async () => {
-    return conflicts;
+    const result = await pool.query(
+        `${SELECT_CONFLICT} WHERE c.is_active = TRUE ORDER BY c.created_at DESC`
+    );
+    return result.rows;
 };
 
-/**
- * Get Conflict By ID
- */
-export const getConflictById = async (
-    conflictId: string
-) => {
+export const getConflictById = async (conflictId: string) => {
+    const result = await pool.query(
+        `${SELECT_CONFLICT} WHERE c.conflict_id = $1`,
+        [conflictId]
+    );
+    return result.rows[0];
+};
 
-    return conflicts.find(
-        conflict => conflict.conflictId === conflictId
+export const createConflict = async (conflictData: any) => {
+
+    const {
+        attendance_id,
+        session_id,
+        student_id,
+        device_id,
+        conflict_type,
+        severity,
+        description
+    } = conflictData;
+
+    const result = await pool.query(
+        `INSERT INTO conflict
+            (attendance_id, attendance_session_id, student_id, device_id,
+             conflict_type, severity, description)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [
+            attendance_id ?? null,
+            session_id,
+            student_id ?? null,
+            device_id ?? null,
+            conflict_type,
+            severity ?? "MEDIUM",
+            description ?? null
+        ]
     );
 
+    return result.rows[0];
 };
 
-/**
- * Create Conflict
- */
-export const createConflict = async (
-    conflictData: any
-) => {
-
-    const newConflict = {
-        conflictId: `C${String(conflicts.length + 1).padStart(3, "0")}`,
-        status: "PENDING",
-        createdAt: new Date().toISOString(),
-        resolvedBy: null,
-        resolution: null,
-        ...conflictData
-    };
-
-    conflicts.push(newConflict);
-
-    return newConflict;
-
-};
-
-/**
- * Resolve Conflict
- */
 export const resolveConflict = async (
     conflictId: string,
     resolutionData: any
 ) => {
 
-    const conflict = conflicts.find(
-        c => c.conflictId === conflictId
+    const result = await pool.query(
+        `UPDATE conflict
+         SET conflict_status = 'RESOLVED',
+             resolved_by = $2,
+             resolution_notes = $3,
+             resolved_at = CURRENT_TIMESTAMP,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE conflict_id = $1
+         RETURNING *`,
+        [
+            conflictId,
+            resolutionData.resolvedBy ?? resolutionData.resolved_by ?? null,
+            resolutionData.resolution ?? resolutionData.resolution_notes ?? "Resolved"
+        ]
     );
 
-    if (!conflict) {
-        return null;
-    }
-
-    conflict.status = "RESOLVED";
-    conflict.resolvedBy = resolutionData.resolvedBy || "ADMIN001";
-    conflict.resolution = resolutionData.resolution || "Resolved";
-
-    return conflict;
-
+    return result.rows[0] || null;
 };
 
-/**
- * Delete Conflict
- */
-export const deleteConflict = async (
-    conflictId: string
-) => {
-
-    conflicts = conflicts.filter(
-        conflict => conflict.conflictId !== conflictId
+export const deleteConflict = async (conflictId: string) => {
+    const result = await pool.query(
+        `UPDATE conflict SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE conflict_id = $1
+         RETURNING conflict_id`,
+        [conflictId]
     );
-
-    return {
-        success: true
-    };
-
+    return { success: result.rowCount !== null && result.rowCount > 0 };
 };

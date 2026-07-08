@@ -420,11 +420,6 @@ CREATE TABLE student (
             )
         ),
 
-    CONSTRAINT chk_student_semester
-        CHECK (
-            current_semester BETWEEN 1 AND 8
-        ),
-
     CONSTRAINT chk_admission_year
         CHECK (
             admission_year >= 2000
@@ -804,16 +799,16 @@ NOT NULL DEFAULT 'VERIFIED',
         UNIQUE (
             attendance_session_id,
             student_id
+        ),
+
+    CONSTRAINT chk_verification_status
+        CHECK (
+            verification_status IN (
+                'VERIFIED',
+                'PENDING',
+                'REJECTED'
+            )
         )
-      
-CONSTRAINT chk_verification_status
-CHECK (
-    verification_status IN (
-        'VERIFIED',
-        'PENDING',
-        'REJECTED'
-    )
-), 
 
 );
 
@@ -1049,7 +1044,7 @@ CREATE TABLE notification (
                 'HIGH',
                 'CRITICAL'
             )
-        ),    
+        )
 
 );
 
@@ -1144,13 +1139,8 @@ CREATE TABLE conflict (
                 'RESOLVED',
                 'REJECTED'
             )
-        ),
-
-        CONSTRAINT fk_conflict_resolved_by
-    FOREIGN KEY (resolved_by)
-    REFERENCES admin_user(admin_id)
-    ON DELETE SET NULL
-    ON UPDATE CASCADE,
+        )
+    -- fk_conflict_resolved_by added later via ALTER TABLE, once admin_user exists
 
 );
 
@@ -1236,6 +1226,13 @@ ALTER TABLE notification
 ADD CONSTRAINT fk_notification_creator
 FOREIGN KEY (created_by)
 REFERENCES admin_user(admin_id);
+
+ALTER TABLE conflict
+ADD CONSTRAINT fk_conflict_resolved_by
+FOREIGN KEY (resolved_by)
+REFERENCES admin_user(admin_id)
+ON DELETE SET NULL
+ON UPDATE CASCADE;
 
 -- ==========================================================
 -- TABLE: Change Log
