@@ -1,6 +1,39 @@
-import Link from 'next/link'
+'use client';
+
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 export default function Home() {
+  const [stats, setStats] = useState({
+  totalStudents: "-",
+  attendanceToday: "-",
+  activeDevices: "-",
+  pendingConflicts: "-"
+});
+
+useEffect(() => {
+  const fetchDashboard = async () => {
+    try {
+      const response = await fetch(
+        "http://localhost:5000/api/v1/dashboard/summary"
+      );
+
+      const result = await response.json();
+
+      setStats({
+        totalStudents: result.data.totalStudents,
+        attendanceToday: result.data.attendanceToday,
+        activeDevices: result.data.activeDevices,
+        pendingConflicts: result.data.pendingConflicts
+      });
+
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  fetchDashboard();
+}, []);
   return (
     <main className="min-h-screen bg-[#0D1727] text-white p-8">
       <div className="max-w-6xl mx-auto">
@@ -14,11 +47,29 @@ export default function Home() {
         {/* Stat Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           {[
-            { label: "Total Students", value: "—", color: "#5DA9FF" },
-            { label: "Present Today", value: "—", color: "#4ADE80" },
-            { label: "Active Devices", value: "—", color: "#F59E0B" },
-            { label: "Open Conflicts", value: "—", color: "#F87171" },
-          ].map((stat) => (
+           
+  {
+    label: "Total Students",
+    value: stats.totalStudents,
+    color: "#5DA9FF"
+  },
+  {
+    label: "Present Today",
+    value: stats.attendanceToday,
+    color: "#4ADE80"
+  },
+  {
+    label: "Active Devices",
+    value: stats.activeDevices,
+    color: "#F59E0B"
+  },
+  {
+    label: "Open Conflicts",
+    value: stats.pendingConflicts,
+    color: "#F87171"
+  },
+]
+          .map((stat) => (
             <div key={stat.label} className="bg-[#1A2436] rounded-2xl p-5 border border-[#2F4E73]">
               <p style={{ color: stat.color }} className="text-2xl font-bold">{stat.value}</p>
               <p className="text-[#90A6BD] text-xs mt-1 font-bold tracking-wide uppercase">{stat.label}</p>
