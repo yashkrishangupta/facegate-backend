@@ -1,44 +1,44 @@
-# name: FaceGate Backend CI
+name: FaceGate Backend CI
 
-# on:
-#   push:
-#     branches:
-#       - main
-#       - master
-#       - development
+on:
+  push:
+    branches:
+      - main
+      - master
+      - development
 
-#   pull_request:
-#     branches:
-#       - main
-#       - master
-#       - development
+  pull_request:
+    branches:
+      - main
+      - master
+      - development
 
-# jobs:
+jobs:
 
-#   build:
+  build:
 
-#     runs-on: ubuntu-latest
+    runs-on: ubuntu-latest
 
-#     defaults:
-#       run:
-#         working-directory: api
+    defaults:
+      run:
+        working-directory: api
 
-#     steps:
+    steps:
 
-#       - name: Checkout Repository
-#         uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
-#       - name: Setup Node.js
-#         uses: actions/setup-node@v4
-#         with:
-#           node-version: 20
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-#       - name: Install Dependencies
-#         run: npm install
+      - name: Install Dependencies
+        run: npm install
 
-#       - name: Build Project
-#         run: npm run build
+      - name: Build Project
+        run: npm run build
 
-#       - name: Run Tests
-#         run: npm test
-#         continue-on-error: true
+      - name: Run Tests
+        run: npm test
+        continue-on-error: true
