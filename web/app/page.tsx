@@ -2,7 +2,6 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import client from './api/client'
-import { API_URL } from '../lib/config';
 
 export default function Home() {
   const [stats, setStats] = useState({
@@ -18,25 +17,21 @@ export default function Home() {
         const d = res.data.data
         setStats({
           totalStudents: d.totalStudents ?? '—',
-          presentToday: d.todayAttendancePercentage ?? '—',
+          presentToday: d.attendanceToday ?? '—',
           activeDevices: d.activeDevices ?? '—',
-          openConflicts: '—',
+          openConflicts: d.pendingConflicts ?? '—',
         })
       })
-      .catch(() => {
-        // backend not connected yet — keep dashes
-      })
+      .catch(() => {})
   }, [])
 
   return (
     <main className="min-h-screen bg-[#0D1727] text-white p-8">
       <div className="max-w-6xl mx-auto">
-
         <div className="mb-10">
           <h1 className="text-3xl font-bold text-white">FaceGate</h1>
           <p className="text-[#90A6BD] mt-1">Admin Dashboard</p>
         </div>
-
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           {[
             { label: "Total Students", value: stats.totalStudents, color: "#5DA9FF" },
@@ -50,7 +45,6 @@ export default function Home() {
             </div>
           ))}
         </div>
-
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {[
             { title: "Students", desc: "Manage enrolled students", href: "/students", color: "#5DA9FF" },
@@ -68,7 +62,6 @@ export default function Home() {
             </Link>
           ))}
         </div>
-
       </div>
     </main>
   )
