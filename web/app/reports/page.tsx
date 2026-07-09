@@ -194,10 +194,7 @@ export default function ReportsPage() {
             return;
          }
 
-         if (activeTab === 'student')
-            setData({ kind: 'student', ...json.data });
-         if (activeTab === 'batch') setData({ kind: 'batch', ...json });
-         if (activeTab === 'subject') setData({ kind: 'subject', ...json });
+      setData({ kind: 'student', ...json.data });
       } catch {
          setError('Network error — make sure the API server is running.');
       } finally {
