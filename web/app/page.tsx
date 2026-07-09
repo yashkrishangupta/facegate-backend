@@ -1,76 +1,49 @@
-'use client';
-
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
+'use client'
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import client from './api/client'
 import { API_URL } from '../lib/config';
 
 export default function Home() {
   const [stats, setStats] = useState({
-  totalStudents: "-",
-  attendanceToday: "-",
-  activeDevices: "-",
-  pendingConflicts: "-"
-});
+    totalStudents: '—',
+    presentToday: '—',
+    activeDevices: '—',
+    openConflicts: '—',
+  })
 
-useEffect(() => {
-  const fetchDashboard = async () => {
-    try {
-      const response = await fetch(
-        `${API_URL}/dashboard/summary`
-      );
+  useEffect(() => {
+    client.get('/api/v1/dashboard/summary')
+      .then((res) => {
+        const d = res.data.data
+        setStats({
+          totalStudents: d.totalStudents ?? '—',
+          presentToday: d.todayAttendancePercentage ?? '—',
+          activeDevices: d.activeDevices ?? '—',
+          openConflicts: '—',
+        })
+      })
+      .catch(() => {
+        // backend not connected yet — keep dashes
+      })
+  }, [])
 
-      const result = await response.json();
-
-      setStats({
-        totalStudents: result.data.totalStudents,
-        attendanceToday: result.data.attendanceToday,
-        activeDevices: result.data.activeDevices,
-        pendingConflicts: result.data.pendingConflicts
-      });
-
-    } catch (error) {
-      console.error(error);
-    }
-  };
-
-  fetchDashboard();
-}, []);
   return (
     <main className="min-h-screen bg-[#0D1727] text-white p-8">
       <div className="max-w-6xl mx-auto">
-        
-        {/* Header */}
+
         <div className="mb-10">
           <h1 className="text-3xl font-bold text-white">FaceGate</h1>
           <p className="text-[#90A6BD] mt-1">Admin Dashboard</p>
         </div>
 
-        {/* Stat Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
           {[
-           
-  {
-    label: "Total Students",
-    value: stats.totalStudents,
-    color: "#5DA9FF"
-  },
-  {
-    label: "Present Today",
-    value: stats.attendanceToday,
-    color: "#4ADE80"
-  },
-  {
-    label: "Active Devices",
-    value: stats.activeDevices,
-    color: "#F59E0B"
-  },
-  {
-    label: "Open Conflicts",
-    value: stats.pendingConflicts,
-    color: "#F87171"
-  },
-]
-          .map((stat) => (
+            { label: "Total Students", value: stats.totalStudents, color: "#5DA9FF" },
+            { label: "Present Today", value: stats.presentToday, color: "#4ADE80" },
+            { label: "Active Devices", value: stats.activeDevices, color: "#F59E0B" },
+            { label: "Open Conflicts", value: stats.openConflicts, color: "#F87171" },
+          ].map((stat) => (
             <div key={stat.label} className="bg-[#1A2436] rounded-2xl p-5 border border-[#2F4E73]">
               <p style={{ color: stat.color }} className="text-2xl font-bold">{stat.value}</p>
               <p className="text-[#90A6BD] text-xs mt-1 font-bold tracking-wide uppercase">{stat.label}</p>
@@ -78,7 +51,6 @@ useEffect(() => {
           ))}
         </div>
 
-        {/* Nav Tiles */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           {[
             { title: "Students", desc: "Manage enrolled students", href: "/students", color: "#5DA9FF" },
