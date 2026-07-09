@@ -1,10 +1,14 @@
 'use client'
-import { useEffect, useState } from 'react'
-import client from '../api/client'
+import { useEffect, useState, useMemo } from 'react'
+import { API_URL } from '../../lib/config'
 
 interface Conflict {
-  id: string; studentName?: string; conflictType: string
-  severity: string; status: string; detectedAt: string
+  conflict_id: string
+  student_name?: string
+  conflict_type: string
+  severity: string
+  status: string
+  created_at: string
 }
 
 export default function ConflictsPage() {
@@ -18,24 +22,32 @@ export default function ConflictsPage() {
   const fetchConflicts = async () => {
     setLoading(true)
     try {
-      const res = await client.get('/api/v1/conflicts', { params: { status: filter } })
-      setConflicts(res.data.data || res.data.conflicts || [])
+      const res = await fetch(`${API_URL}/conflicts`)
+      const json = await res.json()
+      setConflicts(json.data || [])
     } catch { setConflicts([]) } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchConflicts() }, [filter])
+  useEffect(() => { fetchConflicts() }, [])
+
+  // Backend doesn't support server-side status filtering yet — filter client-side.
+  const filtered = useMemo(() => conflicts.filter(c => c.status === filter), [conflicts, filter])
 
   const handleResolve = async (id: string) => {
     setResolving(true)
     try {
-      await client.put(`/api/v1/conflicts/${id}/resolve`, { resolutionNotes: resolveNote, actionTaken: 'MARK_PRESENT' })
+      await fetch(`${API_URL}/conflicts/${id}/resolve`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ resolution: resolveNote })
+      })
       setSelected(null); setResolveNote(''); fetchConflicts()
     } catch {} finally { setResolving(false) }
   }
 
   const handleDismiss = async (id: string) => {
     if (!confirm('Dismiss this conflict?')) return
-    await client.delete(`/api/v1/conflicts/${id}`).catch(() => {})
+    await fetch(`${API_URL}/conflicts/${id}`, { method: 'DELETE' }).catch(() => {})
     fetchConflicts()
   }
 
@@ -54,7 +66,7 @@ export default function ConflictsPage() {
           <h1 className="text-2xl font-bold">Conflict Queue</h1>
         </div>
         <div className="flex gap-2 mb-6">
-          {['PENDING','RESOLVED'].map((f) => (
+          {['PENDING', 'RESOLVED'].map((f) => (
             <button key={f} onClick={() => setFilter(f)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filter === f ? 'bg-[#1E3A5F] text-[#5DA9FF]' : 'text-[#90A6BD] hover:text-white'}`}>
               {f}
@@ -63,7 +75,7 @@ export default function ConflictsPage() {
         </div>
         {loading ? (
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center text-[#90A6BD]">Loading...</div>
-        ) : conflicts.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center">
             <p className="text-4xl mb-4">✅</p>
             <p className="text-[#4ADE80] font-bold">No open conflicts</p>
@@ -73,22 +85,22 @@ export default function ConflictsPage() {
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] overflow-hidden">
             <table className="w-full">
               <thead><tr className="border-b border-[#2F4E73]">
-                {['Student','Type','Severity','Detected','Actions'].map(h => (
+                {['Student', 'Type', 'Severity', 'Detected', 'Actions'].map(h => (
                   <th key={h} className="text-left p-4 text-[#90A6BD] text-sm font-bold">{h}</th>
                 ))}
               </tr></thead>
               <tbody>
-                {conflicts.map((c) => (
-                  <tr key={c.id} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
-                    <td className="p-4 text-white">{c.studentName || '—'}</td>
-                    <td className="p-4 text-[#90A6BD] text-sm">{c.conflictType?.replace(/_/g,' ')}</td>
+                {filtered.map((c) => (
+                  <tr key={c.conflict_id} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
+                    <td className="p-4 text-white">{c.student_name || '—'}</td>
+                    <td className="p-4 text-[#90A6BD] text-sm">{c.conflict_type?.replace(/_/g, ' ')}</td>
                     <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full ${severityColors[c.severity] || ''}`}>{c.severity}</span></td>
-                    <td className="p-4 text-[#90A6BD] text-sm">{new Date(c.detectedAt).toLocaleString()}</td>
+                    <td className="p-4 text-[#90A6BD] text-sm">{new Date(c.created_at).toLocaleString()}</td>
                     <td className="p-4">
                       {c.status === 'PENDING' && (
                         <div className="flex gap-3">
                           <button onClick={() => setSelected(c)} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Resolve</button>
-                          <button onClick={() => handleDismiss(c.id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Dismiss</button>
+                          <button onClick={() => handleDismiss(c.conflict_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Dismiss</button>
                         </div>
                       )}
                     </td>
@@ -102,13 +114,13 @@ export default function ConflictsPage() {
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md">
               <h2 className="text-white font-bold text-lg mb-2">Resolve Conflict</h2>
-              <p className="text-[#90A6BD] text-sm mb-4">{selected.studentName} — {selected.conflictType?.replace(/_/g,' ')}</p>
+              <p className="text-[#90A6BD] text-sm mb-4">{selected.student_name} — {selected.conflict_type?.replace(/_/g, ' ')}</p>
               <textarea placeholder="Resolution notes..." value={resolveNote}
                 onChange={(e) => setResolveNote(e.target.value)} rows={3}
                 className="w-full bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF] resize-none" />
               <div className="flex gap-3 mt-4">
                 <button onClick={() => setSelected(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
-                <button onClick={() => handleResolve(selected.id)} disabled={resolving}
+                <button onClick={() => handleResolve(selected.conflict_id)} disabled={resolving}
                   className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
                   {resolving ? 'Resolving...' : 'Mark Resolved'}
                 </button>

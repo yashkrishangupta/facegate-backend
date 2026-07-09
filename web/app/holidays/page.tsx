@@ -1,25 +1,32 @@
 'use client'
 import { useEffect, useState } from 'react'
-import client from '../api/client'
+import { API_URL } from '../../lib/config'
 
 interface Holiday {
-  id: string; holidayName: string; holidayDate: string
-  holidayType: string; description?: string
+  holiday_id: string
+  holiday_name: string
+  holiday_date: string
+  holiday_type: string
+  description?: string
 }
 
 export default function HolidaysPage() {
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '' })
+  const [form, setForm] = useState({
+    holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '',
+    academicYear: '2024-2028', semester: '5'
+  })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
   const fetchHolidays = async () => {
     setLoading(true)
     try {
-      const res = await client.get('/api/v1/holidays')
-      setHolidays(res.data.holidays || res.data.data || [])
+      const res = await fetch(`${API_URL}/holidays`)
+      const json = await res.json()
+      setHolidays(json.data || [])
     } catch { setHolidays([]) } finally { setLoading(false) }
   }
 
@@ -28,16 +35,32 @@ export default function HolidaysPage() {
   const handleCreate = async () => {
     setError(''); setSubmitting(true)
     try {
-      await client.post('/api/v1/holidays', form)
+      const res = await fetch(`${API_URL}/holidays`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          holiday_date: form.holidayDate,
+          holiday_name: form.holidayName,
+          holiday_type: form.holidayType,
+          description: form.description || undefined,
+          academic_year: form.academicYear,
+          semester: Number(form.semester)
+        })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        setError(json.message || 'Failed to create holiday')
+        return
+      }
       setShowModal(false)
-      setForm({ holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '' })
+      setForm({ holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '', academicYear: '2024-2028', semester: '5' })
       fetchHolidays()
-    } catch (e: any) { setError(e.response?.data?.message || 'Failed') } finally { setSubmitting(false) }
+    } catch { setError('Network error — is the API server running?') } finally { setSubmitting(false) }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Remove this holiday?')) return
-    await client.delete(`/api/v1/holidays/${id}`).catch(() => {})
+    await fetch(`${API_URL}/holidays/${id}`, { method: 'DELETE' }).catch(() => {})
     fetchHolidays()
   }
 
@@ -71,17 +94,17 @@ export default function HolidaysPage() {
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] overflow-hidden">
             <table className="w-full">
               <thead><tr className="border-b border-[#2F4E73]">
-                {['Holiday','Date','Type','Actions'].map(h => (
+                {['Holiday', 'Date', 'Type', 'Actions'].map(h => (
                   <th key={h} className="text-left p-4 text-[#90A6BD] text-sm font-bold">{h}</th>
                 ))}
               </tr></thead>
               <tbody>
                 {holidays.map((h) => (
-                  <tr key={h.id} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
-                    <td className="p-4 text-white font-medium">{h.holidayName}</td>
-                    <td className="p-4 text-[#90A6BD]">{new Date(h.holidayDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
-                    <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full ${typeColors[h.holidayType] || 'bg-[#1A2436] text-[#90A6BD]'}`}>{h.holidayType}</span></td>
-                    <td className="p-4"><button onClick={() => handleDelete(h.id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button></td>
+                  <tr key={h.holiday_id} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
+                    <td className="p-4 text-white font-medium">{h.holiday_name}</td>
+                    <td className="p-4 text-[#90A6BD]">{new Date(h.holiday_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
+                    <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full ${typeColors[h.holiday_type] || 'bg-[#1A2436] text-[#90A6BD]'}`}>{h.holiday_type}</span></td>
+                    <td className="p-4"><button onClick={() => handleDelete(h.holiday_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button></td>
                   </tr>
                 ))}
               </tbody>
@@ -95,22 +118,28 @@ export default function HolidaysPage() {
               {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
               <div className="flex flex-col gap-3">
                 <input placeholder="Holiday Name" value={form.holidayName}
-                  onChange={(e) => setForm(p => ({...p, holidayName: e.target.value}))}
+                  onChange={(e) => setForm(p => ({ ...p, holidayName: e.target.value }))}
                   className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
                 <input type="date" value={form.holidayDate}
-                  onChange={(e) => setForm(p => ({...p, holidayDate: e.target.value}))}
+                  onChange={(e) => setForm(p => ({ ...p, holidayDate: e.target.value }))}
                   className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <select value={form.holidayType} onChange={(e) => setForm(p => ({...p, holidayType: e.target.value}))}
+                <select value={form.holidayType} onChange={(e) => setForm(p => ({ ...p, holidayType: e.target.value }))}
                   className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]">
-                  {['NATIONAL','GAZETTED','INSTITUTIONAL','FESTIVAL','EMERGENCY'].map(t => <option key={t}>{t}</option>)}
+                  {['NATIONAL', 'GAZETTED', 'INSTITUTIONAL', 'FESTIVAL', 'EMERGENCY'].map(t => <option key={t}>{t}</option>)}
                 </select>
                 <input placeholder="Description (optional)" value={form.description}
-                  onChange={(e) => setForm(p => ({...p, description: e.target.value}))}
+                  onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))}
+                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
+                <input placeholder="Academic Year (e.g. 2024-2028)" value={form.academicYear}
+                  onChange={(e) => setForm(p => ({ ...p, academicYear: e.target.value }))}
+                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
+                <input placeholder="Semester" type="number" value={form.semester}
+                  onChange={(e) => setForm(p => ({ ...p, semester: e.target.value }))}
                   className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
               </div>
               <div className="flex gap-3 mt-5">
-                <button onClick={() => {setShowModal(false);setError('')}} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
-                <button onClick={handleCreate} disabled={submitting} className="flex-1 bg-[#F87171] text-white font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting?'Adding...':'Add Holiday'}</button>
+                <button onClick={() => { setShowModal(false); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+                <button onClick={handleCreate} disabled={submitting} className="flex-1 bg-[#F87171] text-white font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Adding...' : 'Add Holiday'}</button>
               </div>
             </div>
           </div>

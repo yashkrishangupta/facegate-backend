@@ -53,3 +53,12 @@ export const heartbeat = async (
 export const getDeviceStatus = async () => {
     return await DeviceRepository.getDeviceStatus();
 };
+
+/**
+ * Deactivate Device
+ */
+export const deactivateDevice = async (
+    deviceId: string
+) => {
+    return await DeviceRepository.deactivateDevice(deviceId);
+};

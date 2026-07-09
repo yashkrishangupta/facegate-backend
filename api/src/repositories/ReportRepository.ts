@@ -37,12 +37,17 @@ export const getDailyReport = async (date?: string) => {
 
 export const getStudentReport = async (studentId: string) => {
 
-    const nameResult = await pool.query(
-        `SELECT first_name || ' ' || last_name AS student_name FROM student WHERE student_id = $1`,
+    const studentResult = await pool.query(
+        `SELECT s.first_name || ' ' || s.last_name AS student_name, b.batch_code AS batch
+         FROM student s
+         JOIN batch b ON b.batch_id = s.batch_id
+         WHERE s.student_id = $1`,
         [studentId]
     );
 
-    const statsResult = await pool.query(
+    const student = studentResult.rows[0];
+
+    const overallResult = await pool.query(
         `SELECT
             COUNT(*) AS total_classes,
             COUNT(*) FILTER (WHERE attendance_status = 'PRESENT') AS attended
@@ -51,18 +56,49 @@ export const getStudentReport = async (studentId: string) => {
         [studentId]
     );
 
-    const stats = statsResult.rows[0];
-    const totalClasses = Number(stats.total_classes);
-    const attendedClasses = Number(stats.attended);
+    const overall = overallResult.rows[0];
+    const totalClasses = Number(overall.total_classes);
+    const totalPresent = Number(overall.attended);
+
+    const subjectsResult = await pool.query(
+        `SELECT
+            sub.subject_id,
+            sub.subject_code,
+            sub.subject_name AS subject,
+            COUNT(a.attendance_id) FILTER (WHERE a.attendance_status = 'PRESENT') AS present,
+            COUNT(a.attendance_id) AS total
+         FROM attendance a
+         JOIN attendance_session ases ON ases.attendance_session_id = a.attendance_session_id
+         JOIN timetable t ON t.timetable_id = ases.timetable_id
+         JOIN subject sub ON sub.subject_id = t.subject_id
+         WHERE a.student_id = $1 AND a.is_active = TRUE
+         GROUP BY sub.subject_id, sub.subject_code, sub.subject_name
+         ORDER BY sub.subject_name`,
+        [studentId]
+    );
+
+    const subjects = subjectsResult.rows.map((row) => {
+        const present = Number(row.present);
+        const total = Number(row.total);
+        return {
+            subjectId: row.subject_id,
+            subjectCode: row.subject_code,
+            subject: row.subject,
+            present,
+            total,
+            percentage: total === 0 ? 0 : Number(((present / total) * 100).toFixed(2))
+        };
+    });
 
     return {
         studentId,
-        studentName: nameResult.rows[0]?.student_name ?? null,
+        studentName: student?.student_name ?? null,
+        batch: student?.batch ?? null,
         totalClasses,
-        attendedClasses,
-        missedClasses: totalClasses - attendedClasses,
-        attendancePercentage:
-            totalClasses === 0 ? 0 : Number(((attendedClasses / totalClasses) * 100).toFixed(2))
+        totalPresent,
+        missedClasses: totalClasses - totalPresent,
+        overallAttendance: totalClasses === 0 ? 0 : Number(((totalPresent / totalClasses) * 100).toFixed(2)),
+        subjects
     };
 };
 

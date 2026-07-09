@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import client from './api/client'
+import { API_URL } from '../lib/config'
 
 export default function Home() {
   const [stats, setStats] = useState({
@@ -12,9 +12,10 @@ export default function Home() {
   })
 
   useEffect(() => {
-    client.get('/api/v1/dashboard/summary')
-      .then((res) => {
-        const d = res.data.data
+    fetch(`${API_URL}/dashboard/summary`)
+      .then((res) => res.json())
+      .then((json) => {
+        const d = json.data
         setStats({
           totalStudents: d.totalStudents ?? '—',
           presentToday: d.attendanceToday ?? '—',

@@ -158,3 +158,13 @@ export const getDeviceStatus = async () => {
         devices
     };
 };
+
+export const deactivateDevice = async (deviceId: string) => {
+    const result = await pool.query(
+        `UPDATE device SET is_active = FALSE, device_status = 'INACTIVE', updated_at = CURRENT_TIMESTAMP
+         WHERE device_id = $1
+         RETURNING device_id`,
+        [deviceId]
+    );
+    return { success: result.rowCount !== null && result.rowCount > 0 };
+};

@@ -178,3 +178,36 @@ export const getDeviceStatus = async (
     }
 
 };
+
+/**
+ * Deactivate Device
+ */
+export const deactivateDevice = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const deviceId = req.params.deviceId as string;
+
+        const result = await DeviceService.deactivateDevice(deviceId);
+
+        res.status(200).json({
+            success: true,
+            message: "Device deactivated successfully",
+            data: result
+        });
+
+    } catch (err) {
+
+        console.error("Deactivate device error:", err);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to deactivate device"
+        });
+
+    }
+
+};

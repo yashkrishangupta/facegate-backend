@@ -6,7 +6,8 @@ import {
     registerDevice,
     updateDevice,
     heartbeat,
-    getDeviceStatus
+    getDeviceStatus,
+    deactivateDevice
 } from "../controllers/DeviceController";
 
 const router = Router();
@@ -32,5 +33,8 @@ router.post("/heartbeat", heartbeat);
 
 // Update Device
 router.put("/:deviceId", updateDevice);
+
+// Deactivate Device
+router.delete("/:deviceId", deactivateDevice);
 
 export default router;

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { API_URL } from '../../lib/config';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,8 +65,7 @@ type ReportData =
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-const API_BASE =
-   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+const API_BASE = API_URL;
 
 function pctChipColor(pct: number): ChipColor {
    if (pct >= 75) return 'green';
@@ -164,24 +164,20 @@ export default function ReportsPage() {
                   setLoading(false);
                   return;
                }
-               url = `${API_BASE}/reports/students/${studentIdInput.trim()}?${buildParams()}`;
+               url = `${API_BASE}/reports/student/${studentIdInput.trim()}?${buildParams()}`;
                break;
             case 'batch':
-               if (!batchIdInput.trim()) {
-                  setError('Enter a Batch ID.');
-                  setLoading(false);
-                  return;
-               }
-               url = `${API_BASE}/reports/batches/${batchIdInput.trim()}?${buildParams()}`;
-               break;
+               setError(
+                  'Batch-level reports are not available yet — the backend only exposes a department-level report today. Ask your backend teammate to add GET /reports/batch/:batchId.',
+               );
+               setLoading(false);
+               return;
             case 'subject':
-               if (!subjectIdInput.trim()) {
-                  setError('Enter a Subject ID.');
-                  setLoading(false);
-                  return;
-               }
-               url = `${API_BASE}/reports/subjects/${subjectIdInput.trim()}?${buildParams()}`;
-               break;
+               setError(
+                  'Subject-level reports are not available yet — this endpoint has not been built on the backend. Ask your backend teammate to add GET /reports/subject/:subjectId.',
+               );
+               setLoading(false);
+               return;
             case 'room':
                setError(
                   'Room reports are based on device assignment. Use the Devices page to view room-level sessions.',
