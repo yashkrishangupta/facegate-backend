@@ -21,6 +21,11 @@ const SELECT_DEVICE = `
         dv.network_status,
         dv.device_status,
         dv.is_active,
+        -- Only meaningful while device_status = 'PENDING_PAIRING'; NULL
+        -- afterward. Shown so an admin can retrieve/re-share the code
+        -- without regenerating it if they navigate away from the modal.
+        dv.pairing_code,
+        dv.pairing_code_expires_at,
         r.room_id,
         r.room_number
     FROM device dv
@@ -42,40 +47,95 @@ export const getDeviceById = async (deviceId: string) => {
     return result.rows[0];
 };
 
-export const registerDevice = async (deviceData: any) => {
+/**
+ * Is this room already claimed by a device that's active or mid-pairing?
+ * Backs the architecture's "guard against two devices assigned the same
+ * room" decision — checked before create AND before a reassignment.
+ */
+export const roomHasClaimingDevice = async (
+    roomId: string,
+    excludingDeviceId?: string
+) => {
+    const result = await pool.query(
+        `SELECT device_id FROM device
+         WHERE room_id = $1
+           AND is_active = TRUE
+           AND device_status IN ('ACTIVE', 'PENDING_PAIRING')
+           AND ($2::uuid IS NULL OR device_id != $2)`,
+        [roomId, excludingDeviceId ?? null]
+    );
+    return result.rows.length > 0;
+};
 
-    const {
-        room_id,
-        device_identifier,
-        device_name,
-        device_type,
-        app_version,
-        operating_system
-    } = deviceData;
+const generatePairingCode = () =>
+    String(Math.floor(100000 + Math.random() * 900000));
 
-    if (!app_version) {
-        throw new Error("app_version is required to register a device");
-    }
+/**
+ * Step 1 of pairing: admin creates a device record for a room and gets back
+ * a 6-digit code (valid 15 minutes) to hand to whoever is setting up the
+ * physical tablet. No device_token exists yet — the record is a placeholder
+ * until the device itself calls /devices/pair.
+ */
+export const createPendingDevice = async (deviceData: any) => {
 
-    // device_token is a UUID column with DEFAULT gen_random_uuid() — let
-    // Postgres generate it rather than producing our own format here.
-    // It's only ever returned once, at registration time; the device must
-    // store it locally as its x-api-key for every future sync call.
+    const { room_id, device_name, device_type } = deviceData;
+
+    const pairingCode = generatePairingCode();
+
     const result = await pool.query(
         `INSERT INTO device
-            (room_id, device_identifier, device_name, device_type,
-             app_version, operating_system, device_status, network_status,
-             registration_date)
-         VALUES ($1, $2, $3, $4, $5, $6, 'ACTIVE', 'ONLINE', CURRENT_TIMESTAMP)
+            (room_id, device_name, device_type, device_status,
+             network_status, pairing_code, pairing_code_expires_at)
+         VALUES ($1, $2, $3, 'PENDING_PAIRING', 'OFFLINE', $4,
+                 CURRENT_TIMESTAMP + INTERVAL '15 minutes')
          RETURNING *`,
         [
             room_id,
-            device_identifier,
             device_name,
             device_type ?? "ANDROID_TABLET",
-            app_version,
-            operating_system ?? null
+            pairingCode
         ]
+    );
+
+    return result.rows[0];
+};
+
+/**
+ * Step 2 of pairing: the physical device exchanges the pairing code for its
+ * permanent device_id + device_token. Single-use — the code is cleared the
+ * moment it's redeemed, and an expired code is rejected.
+ */
+export const redeemPairingCode = async (redeemData: any) => {
+
+    const { pairingCode, deviceIdentifier, appVersion, operatingSystem } = redeemData;
+
+    const pending = await pool.query(
+        `SELECT device_id FROM device
+         WHERE pairing_code = $1
+           AND device_status = 'PENDING_PAIRING'
+           AND is_active = TRUE
+           AND pairing_code_expires_at > CURRENT_TIMESTAMP`,
+        [pairingCode]
+    );
+
+    if (pending.rowCount === 0) {
+        return null;
+    }
+
+    const result = await pool.query(
+        `UPDATE device
+         SET device_token = gen_random_uuid(),
+             device_identifier = $2,
+             app_version = $3,
+             operating_system = $4,
+             device_status = 'ACTIVE',
+             network_status = 'ONLINE',
+             pairing_code = NULL,
+             pairing_code_expires_at = NULL,
+             registration_date = CURRENT_TIMESTAMP
+         WHERE device_id = $1
+         RETURNING *`,
+        [pending.rows[0].device_id, deviceIdentifier, appVersion, operatingSystem ?? null]
     );
 
     return result.rows[0];
@@ -95,6 +155,16 @@ export const updateDevice = async (
 
     if (fields.length === 0) {
         return getDeviceById(deviceId);
+    }
+
+    // Reassigning a device to a different room (Section 2 of the
+    // architecture doc — "reassignment doesn't require re-pairing") must
+    // still respect the one-active-device-per-room rule.
+    if (deviceData.room_id) {
+        const claimed = await roomHasClaimingDevice(deviceData.room_id, deviceId);
+        if (claimed) {
+            throw new Error("That room already has an active or pending device assigned to it");
+        }
     }
 
     const setClause = fields

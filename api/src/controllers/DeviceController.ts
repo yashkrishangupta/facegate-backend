@@ -60,28 +60,75 @@ export const getDeviceById = async (
 };
 
 /**
- * Register Device
+ * Create Pending Device (admin, website) — returns a pairing code, not a
+ * device_token. The token is only issued once the physical device redeems
+ * that code via POST /devices/pair.
  */
-export const registerDevice = async (
+export const createPendingDevice = async (
     req: Request,
     res: Response
 ): Promise<void> => {
 
     try {
 
-        const device = await DeviceService.registerDevice(req.body);
+        const device = await DeviceService.createPendingDevice(req.body);
 
         res.status(201).json({
             success: true,
-            message: "Device registered successfully",
-            data: device
+            message: "Device created — share the pairing code with whoever is setting up the tablet. It expires in 15 minutes.",
+            data: {
+                deviceId: device.device_id,
+                roomId: device.room_id,
+                deviceName: device.device_name,
+                pairingCode: device.pairing_code,
+                pairingCodeExpiresAt: device.pairing_code_expires_at
+            }
         });
 
-    } catch {
+    } catch (err: any) {
 
-        res.status(500).json({
+        res.status(400).json({
             success: false,
-            message: "Device registration failed"
+            message: err?.message || "Device creation failed"
+        });
+
+    }
+
+};
+
+/**
+ * Pair Device (device, first app launch) — exchanges a pairing code for a
+ * permanent device_id + device_token.
+ */
+export const pairDevice = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const device = await DeviceService.redeemPairingCode({
+            pairingCode: req.body.pairing_code,
+            deviceIdentifier: req.body.device_identifier,
+            appVersion: req.body.app_version,
+            operatingSystem: req.body.operating_system
+        });
+
+        res.status(200).json({
+            success: true,
+            message: "Device paired successfully",
+            data: {
+                deviceId: device.device_id,
+                deviceToken: device.device_token,
+                roomId: device.room_id
+            }
+        });
+
+    } catch (err: any) {
+
+        res.status(400).json({
+            success: false,
+            message: err?.message || "Pairing failed"
         });
 
     }
@@ -111,11 +158,11 @@ export const updateDevice = async (
             data: device
         });
 
-    } catch {
+    } catch (err: any) {
 
-        res.status(500).json({
+        res.status(400).json({
             success: false,
-            message: "Failed to update device"
+            message: err?.message || "Failed to update device"
         });
 
     }

@@ -4,7 +4,8 @@ import { deviceAuth } from "../middleware/deviceAuth";
 import {
     getAllDevices,
     getDeviceById,
-    registerDevice,
+    createPendingDevice,
+    pairDevice,
     updateDevice,
     heartbeat,
     getDeviceStatus,
@@ -26,8 +27,14 @@ router.get("/status", getDeviceStatus);
 // Get Device By ID
 router.get("/:deviceId", getDeviceById);
 
-// Register Device
-router.post("/register", registerDevice);
+// Create Device (admin, website) — returns a pairing code, not a token.
+// Replaces the old self-service POST /register, which let anyone who knew
+// a room_id mint themselves a valid device_token with no admin involved.
+router.post("/", createPendingDevice);
+
+// Pair Device (physical device, first app launch) — exchanges the pairing
+// code for a permanent device_id + device_token.
+router.post("/pair", pairDevice);
 
 // Device Heartbeat — device-token protected (was open to anyone before)
 router.post("/heartbeat", deviceAuth, heartbeat);

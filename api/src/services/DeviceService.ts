@@ -17,12 +17,45 @@ export const getDeviceById = async (
 };
 
 /**
- * Register Device
+ * Create a pending device + pairing code (admin action, website).
  */
-export const registerDevice = async (
+export const createPendingDevice = async (
     deviceData: any
 ) => {
-    return await DeviceRepository.registerDevice(deviceData);
+
+    if (!deviceData.room_id || !deviceData.device_name) {
+        throw new Error("room_id and device_name are required");
+    }
+
+    const claimed = await DeviceRepository.roomHasClaimingDevice(deviceData.room_id);
+    if (claimed) {
+        throw new Error(
+            "That room already has an active or pending device assigned to it. " +
+            "Reassign or disable the existing device first."
+        );
+    }
+
+    return await DeviceRepository.createPendingDevice(deviceData);
+};
+
+/**
+ * Redeem a pairing code (device action, first app launch).
+ */
+export const redeemPairingCode = async (
+    redeemData: any
+) => {
+
+    if (!redeemData.pairingCode) {
+        throw new Error("pairingCode is required");
+    }
+
+    const device = await DeviceRepository.redeemPairingCode(redeemData);
+
+    if (!device) {
+        throw new Error("Invalid or expired pairing code");
+    }
+
+    return device;
 };
 
 /**

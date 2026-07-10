@@ -628,17 +628,29 @@ CREATE TABLE device (
 
     room_id UUID NOT NULL,
 
-    device_identifier VARCHAR(100) NOT NULL UNIQUE,
+    -- Unknown until the physical device actually calls /devices/pair, so
+    -- nullable at admin-creation time. Still unique once set.
+    device_identifier VARCHAR(100) UNIQUE,
 
     device_name VARCHAR(100) NOT NULL,
 
     device_type VARCHAR(30) NOT NULL DEFAULT 'ANDROID_TABLET',
 
-    app_version VARCHAR(20) NOT NULL,
+    -- Same reasoning as device_identifier: only known once the device pairs.
+    app_version VARCHAR(20),
 
     operating_system VARCHAR(50),
 
-    device_token UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+    -- NULL until pairing completes — the token is only ever handed to the
+    -- physical device at the end of the pairing-code exchange (see
+    -- pairing_code below), never at admin-creation time.
+    device_token UUID UNIQUE,
+
+    -- 6-digit code shown to the admin when the device record is created.
+    -- Typed into the app once; single-use, cleared on successful pairing.
+    pairing_code VARCHAR(6) UNIQUE,
+
+    pairing_code_expires_at TIMESTAMP,
 
     registration_date TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -652,7 +664,7 @@ CREATE TABLE device (
 
     network_status VARCHAR(20) NOT NULL DEFAULT 'OFFLINE',
 
-    device_status VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+    device_status VARCHAR(20) NOT NULL DEFAULT 'PENDING_PAIRING',
 
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -685,6 +697,7 @@ CREATE TABLE device (
     CONSTRAINT chk_device_status
         CHECK (
             device_status IN (
+                'PENDING_PAIRING',
                 'ACTIVE',
                 'INACTIVE',
                 'MAINTENANCE',
@@ -708,6 +721,13 @@ CREATE TABLE device (
         )
 
 );
+
+-- Architecture decision (Section 9): "two devices assigned the same room by
+-- mistake" must be guarded against. A room can have any number of retired/
+-- disabled devices in its history, but only one ACTIVE one at a time.
+CREATE UNIQUE INDEX uq_device_one_active_per_room
+    ON device (room_id)
+    WHERE device_status = 'ACTIVE' AND is_active = TRUE;
 
 
 
