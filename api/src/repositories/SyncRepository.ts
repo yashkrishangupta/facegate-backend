@@ -46,11 +46,16 @@ const pullForRoom = async (roomId: string, since?: string) => {
     const timetableParams = since ? [roomId, since] : [roomId];
 
     const timetable = await pool.query(
-        `SELECT t.timetable_id, t.batch_id, t.faculty_id, t.subject_id, t.room_id,
+        `SELECT t.timetable_id, t.batch_id, b.batch_code, t.faculty_id,
+                f.first_name || ' ' || f.last_name AS faculty_name,
+                t.subject_id, sub.subject_code, sub.subject_name, t.room_id,
                 t.day_of_week, t.lecture_number, t.start_time, t.end_time,
                 t.attendance_window_minutes, t.effective_from, t.effective_to,
                 t.updated_at
          FROM timetable t
+         JOIN batch b ON b.batch_id = t.batch_id
+         JOIN faculty f ON f.faculty_id = t.faculty_id
+         JOIN subject sub ON sub.subject_id = t.subject_id
          WHERE t.room_id = $1 AND t.is_active = TRUE ${sinceClause}`,
         timetableParams
     );
@@ -59,10 +64,11 @@ const pullForRoom = async (roomId: string, since?: string) => {
     const studentParams = since ? [roomId, since] : [roomId];
 
     const students = await pool.query(
-        `SELECT DISTINCT s.student_id, s.batch_id, s.registration_number,
+        `SELECT DISTINCT s.student_id, s.batch_id, b.batch_code, s.registration_number,
                 s.roll_number, s.first_name, s.last_name, s.email, s.phone,
                 s.gender, s.student_status, s.updated_at
          FROM student s
+         JOIN batch b ON b.batch_id = s.batch_id
          WHERE s.is_active = TRUE
            AND s.batch_id IN (
                SELECT DISTINCT batch_id FROM timetable
@@ -144,6 +150,16 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
 /**
  * Batched, idempotent attendance push. Upserts on (session_id, student_id) —
  * safe to retry from a device with a shaky connection.
+ *
+ * attendance.attendance_session_id has a hard foreign key to
+ * attendance_session, and attendance_session enforces one row per
+ * (timetable_id, session_date) — so the device's own locally-generated
+ * session_id can't be trusted as-is (two devices, or the same device
+ * offline across a restart, could each mint a different UUID for what is
+ * actually the same class period). Each record instead carries
+ * timetable_id + session_date; this function resolves — creating on first
+ * use — the one real session row for that period and attaches attendance
+ * to that canonical ID.
  */
 export const uploadAttendance = async (deviceId: string, attendanceData: any) => {
 
@@ -155,8 +171,45 @@ export const uploadAttendance = async (deviceId: string, attendanceData: any) =>
     let uploaded = 0;
     let failed = 0;
 
+    // Cache resolved session IDs within this batch so records for the same
+    // period don't repeat the lookup/insert round trip.
+    const sessionCache = new Map<string, string>();
+
+    const resolveSessionId = async (timetableId: string, sessionDate: string): Promise<string> => {
+        const cacheKey = `${timetableId}:${sessionDate}`;
+        const cached = sessionCache.get(cacheKey);
+        if (cached) return cached;
+
+        const inserted = await pool.query(
+            `INSERT INTO attendance_session
+                (attendance_session_id, timetable_id, session_date, start_time, end_time, session_status)
+             SELECT gen_random_uuid(), t.timetable_id, $2, t.start_time, t.end_time, 'ACTIVE'
+             FROM timetable t
+             WHERE t.timetable_id = $1
+             ON CONFLICT ON CONSTRAINT uq_session_per_day DO NOTHING
+             RETURNING attendance_session_id`,
+            [timetableId, sessionDate]
+        );
+
+        const sessionId = inserted.rows[0]?.attendance_session_id
+            ?? (await pool.query(
+                `SELECT attendance_session_id FROM attendance_session
+                 WHERE timetable_id = $1 AND session_date = $2`,
+                [timetableId, sessionDate]
+            )).rows[0]?.attendance_session_id;
+
+        if (!sessionId) {
+            throw new Error(`No timetable row found for timetable_id ${timetableId}`);
+        }
+
+        sessionCache.set(cacheKey, sessionId);
+        return sessionId;
+    };
+
     for (const record of records) {
         try {
+            const sessionId = await resolveSessionId(record.timetable_id, record.session_date);
+
             await pool.query(
                 `INSERT INTO attendance
                     (attendance_session_id, student_id, device_id, attendance_status,
@@ -172,7 +225,7 @@ export const uploadAttendance = async (deviceId: string, attendanceData: any) =>
                     synced_at = CURRENT_TIMESTAMP,
                     updated_at = CURRENT_TIMESTAMP`,
                 [
-                    record.session_id,
+                    sessionId,
                     record.student_id,
                     deviceId,
                     record.status ?? "PRESENT",

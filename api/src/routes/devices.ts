@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { deviceAuth } from "../middleware/deviceAuth";
 
 import {
     getAllDevices,
@@ -28,8 +29,8 @@ router.get("/:deviceId", getDeviceById);
 // Register Device
 router.post("/register", registerDevice);
 
-// Device Heartbeat
-router.post("/heartbeat", heartbeat);
+// Device Heartbeat — device-token protected (was open to anyone before)
+router.post("/heartbeat", deviceAuth, heartbeat);
 
 // Update Device
 router.put("/:deviceId", updateDevice);

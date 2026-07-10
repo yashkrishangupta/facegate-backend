@@ -1,115 +1,84 @@
-/**
- * Mock Notification Repository
- */
-
-let notifications = [
-
-    {
-        notificationId: "N001",
-        title: "Attendance Sync Completed",
-        message: "Attendance records have been synchronized successfully.",
-        type: "SYNC",
-        priority: "LOW",
-        isRead: false,
-        createdAt: "2026-07-06T09:10:00Z"
-    },
-
-    {
-        notificationId: "N002",
-        title: "Device Offline",
-        message: "Tablet LH102 is currently offline.",
-        type: "DEVICE",
-        priority: "HIGH",
-        isRead: false,
-        createdAt: "2026-07-06T10:20:00Z"
-    },
-
-    {
-        notificationId: "N003",
-        title: "Unknown Face Detected",
-        message: "Unknown person detected during attendance.",
-        type: "SECURITY",
-        priority: "CRITICAL",
-        isRead: true,
-        createdAt: "2026-07-05T14:00:00Z"
-    }
-
-];
+import pool from "../config/database";
 
 /**
- * Get All Notifications
+ * Notification Repository
+ * Backed directly by the `notification` table.
  */
+
+const SELECT_NOTIFICATION = `
+    SELECT
+        notification_id,
+        admin_id,
+        title,
+        message,
+        notification_type AS type,
+        priority,
+        is_read,
+        read_at,
+        created_by,
+        created_at,
+        is_active
+    FROM notification
+`;
+
 export const getAllNotifications = async () => {
-    return notifications;
+    const result = await pool.query(
+        `${SELECT_NOTIFICATION} WHERE is_active = TRUE ORDER BY created_at DESC`
+    );
+    return result.rows;
 };
 
-/**
- * Get Notification By ID
- */
-export const getNotificationById = async (
-    notificationId: string
-) => {
+export const getNotificationById = async (notificationId: string) => {
+    const result = await pool.query(
+        `${SELECT_NOTIFICATION} WHERE notification_id = $1`,
+        [notificationId]
+    );
+    return result.rows[0];
+};
 
-    return notifications.find(
-        notification => notification.notificationId === notificationId
+export const createNotification = async (notificationData: any) => {
+
+    const { admin_id, title, message, type, priority, created_by } = notificationData;
+
+    const result = await pool.query(
+        `INSERT INTO notification
+            (admin_id, title, message, notification_type, priority, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING notification_id, admin_id, title, message,
+                   notification_type AS type, priority, is_read, read_at,
+                   created_by, created_at, is_active`,
+        [
+            admin_id ?? null,
+            title,
+            message,
+            type ?? notificationData.notification_type,
+            priority ?? "MEDIUM",
+            created_by ?? null
+        ]
     );
 
+    return result.rows[0];
 };
 
-/**
- * Create Notification
- */
-export const createNotification = async (
-    notificationData: any
-) => {
-
-    const newNotification = {
-        notificationId: `N${String(notifications.length + 1).padStart(3, "0")}`,
-        isRead: false,
-        createdAt: new Date().toISOString(),
-        ...notificationData
-    };
-
-    notifications.push(newNotification);
-
-    return newNotification;
-
-};
-
-/**
- * Mark Notification As Read
- */
-export const markAsRead = async (
-    notificationId: string
-) => {
-
-    const notification = notifications.find(
-        n => n.notificationId === notificationId
+export const markAsRead = async (notificationId: string) => {
+    const result = await pool.query(
+        `UPDATE notification
+         SET is_read = TRUE, read_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+         WHERE notification_id = $1
+         RETURNING notification_id, admin_id, title, message,
+                   notification_type AS type, priority, is_read, read_at,
+                   created_by, created_at, is_active`,
+        [notificationId]
     );
-
-    if (!notification) {
-        return null;
-    }
-
-    notification.isRead = true;
-
-    return notification;
-
+    return result.rows[0] || null;
 };
 
-/**
- * Delete Notification
- */
-export const deleteNotification = async (
-    notificationId: string
-) => {
-
-    notifications = notifications.filter(
-        notification => notification.notificationId !== notificationId
+export const deleteNotification = async (notificationId: string) => {
+    const result = await pool.query(
+        `UPDATE notification SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE notification_id = $1
+         RETURNING notification_id`,
+        [notificationId]
     );
-
-    return {
-        success: true
-    };
-
+    return { success: result.rowCount !== null && result.rowCount > 0 };
 };

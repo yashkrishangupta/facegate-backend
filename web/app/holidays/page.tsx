@@ -100,7 +100,7 @@ export default function HolidaysPage() {
               </tr></thead>
               <tbody>
                 {holidays.map((h) => (
-                  <tr key={h.holiday_id} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
+                  <tr key={h.holiday_id ?? h.holiday_date} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
                     <td className="p-4 text-white font-medium">{h.holiday_name}</td>
                     <td className="p-4 text-[#90A6BD]">{new Date(h.holiday_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                     <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full ${typeColors[h.holiday_type] || 'bg-[#1A2436] text-[#90A6BD]'}`}>{h.holiday_type}</span></td>

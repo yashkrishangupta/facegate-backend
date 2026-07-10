@@ -132,7 +132,18 @@ export const heartbeat = async (
 
     try {
 
-        const response = await DeviceService.heartbeat(req.body);
+        // deviceAuth middleware (now applied to this route) attaches the
+        // authenticated device — use its ID rather than trusting whatever
+        // deviceId the request body claims, which let any caller spoof
+        // heartbeats for any device.
+        const deviceId = (req as any).device.device_id;
+
+        const response = await DeviceService.heartbeat({
+            deviceId,
+            batteryLevel: req.body.battery_level,
+            storageAvailableMb: req.body.storage_available_mb,
+            networkStatus: req.body.network_status
+        });
 
         res.status(200).json({
             success: true,
