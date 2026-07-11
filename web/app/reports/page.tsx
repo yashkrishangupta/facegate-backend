@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { API_URL } from '../../lib/config';
+import { getToken, isLoggedIn } from '../../lib/auth';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,6 +126,12 @@ function StatCard({
 // Main Page
 // ---------------------------------------------------------------------------
 export default function ReportsPage() {
+   const router = useRouter();
+
+   useEffect(() => {
+      if (!isLoggedIn()) { router.push('/login'); }
+   }, []);
+
    const [activeTab, setActiveTab] = useState<Tab>('student');
 
    // Filter inputs
@@ -186,7 +194,7 @@ export default function ReportsPage() {
                return;
          }
 
-         const res = await fetch(url);
+         const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
          const json = await res.json();
          if (!res.ok || !json.success) {
             setError(json.message ?? 'Failed to fetch report.');
@@ -241,7 +249,7 @@ export default function ReportsPage() {
       const url = `${API_BASE}/reports/export?${params}`;
 
       try {
-         const res = await fetch(url);
+         const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
          if (!res.ok) {
             setError('Export failed — server returned an error.');
             return;

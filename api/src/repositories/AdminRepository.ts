@@ -1,28 +1,31 @@
 import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 import pool from "../config/database";
+import { JWT_SECRET, JWT_EXPIRES_IN } from "../config/env";
 
 /**
  * Admin Repository
- * Backed by the `admin_user` table. JWT issuance and route-level auth are
- * explicitly out of scope for this build (see architecture doc, Section 9) —
- * this repository only handles credential checking and profile CRUD, so it's
- * ready to plug into real auth middleware once that's added.
+ *
+ * Real login now exists (previous version explicitly deferred this per
+ * architecture doc Section 9 — that decision has been reversed). Login is
+ * by `username` (institutional email is still stored but not the login
+ * key — faculty accounts are provisioned with a generated username).
  */
 
 const SELECT_ADMIN = `
     SELECT
-        admin_id, employee_id, first_name, last_name, email, role,
-        phone, last_login, account_status, is_active
+        admin_id, employee_id, username, faculty_id, first_name, last_name,
+        email, role, phone, last_login, account_status, is_active
     FROM admin_user
 `;
 
 export const login = async (loginData: any) => {
 
-    const { email, password } = loginData;
+    const { username, password } = loginData;
 
     const result = await pool.query(
-        `SELECT * FROM admin_user WHERE email = $1 AND is_active = TRUE`,
-        [email]
+        `SELECT * FROM admin_user WHERE username = $1 AND is_active = TRUE`,
+        [username]
     );
 
     const admin = result.rows[0];
@@ -55,46 +58,44 @@ export const login = async (loginData: any) => {
         [admin.admin_id]
     );
 
+    const token = jwt.sign(
+        { adminId: admin.admin_id, role: admin.role, facultyId: admin.faculty_id ?? null },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN } as jwt.SignOptions
+    );
+
     const { password_hash, ...safeAdmin } = admin;
 
-    // NOTE: no JWT is issued here — per Section 9 of the architecture doc,
-    // website login/auth is explicitly deferred to a later build. Swap this
-    // for a real signed token once that work starts.
-    return { success: true, admin: safeAdmin };
+    return { success: true, token, admin: safeAdmin };
 };
 
 export const logout = async () => {
+    // Stateless JWT — nothing to invalidate server-side. Client just drops
+    // the token. (A revocation list is future work if it's ever needed.)
     return { success: true };
 };
 
-const resolveAdminId = async (adminId?: string): Promise<string | null> => {
-    if (adminId) return adminId;
-    const result = await pool.query(
-        `SELECT admin_id FROM admin_user WHERE is_active = TRUE ORDER BY created_at LIMIT 1`
-    );
-    return result.rows[0]?.admin_id ?? null;
-};
-
-export const getProfile = async (adminId?: string) => {
-    const id = await resolveAdminId(adminId);
-    if (!id) return null;
+export const getProfile = async (adminId: string) => {
     const result = await pool.query(
         `${SELECT_ADMIN} WHERE admin_id = $1`,
-        [id]
+        [adminId]
     );
     return result.rows[0];
 };
 
-export const updateProfile = async (profileData: any, adminId?: string) => {
+/**
+ * Profile-only update — deliberately cannot touch role, account_status, or
+ * password. Those live in updateSecurity (SUPER_ADMIN only) and
+ * changePassword/resetPassword respectively, so an ADMIN calling this
+ * endpoint has no path to escalating anyone's privileges.
+ */
+export const updateProfile = async (adminId: string, profileData: any) => {
 
-    const id = await resolveAdminId(adminId ?? profileData.adminId ?? profileData.admin_id);
-    if (!id) return null;
-
-    const allowedFields = ["first_name", "last_name", "phone"];
+    const allowedFields = ["first_name", "last_name", "phone", "email"];
     const fields = Object.keys(profileData).filter(k => allowedFields.includes(k));
 
     if (fields.length === 0) {
-        return getProfile(id);
+        return getProfile(adminId);
     }
 
     const setClause = fields.map((field, i) => `${field} = $${i + 2}`).join(", ");
@@ -104,24 +105,26 @@ export const updateProfile = async (profileData: any, adminId?: string) => {
         `UPDATE admin_user
          SET ${setClause}, updated_at = CURRENT_TIMESTAMP
          WHERE admin_id = $1
-         RETURNING admin_id, employee_id, first_name, last_name, email, role,
-                   phone, last_login, account_status, is_active`,
-        [id, ...values]
+         RETURNING admin_id, employee_id, username, faculty_id, first_name,
+                   last_name, email, role, phone, last_login, account_status, is_active`,
+        [adminId, ...values]
     );
 
     return result.rows[0] || null;
 };
 
-export const changePassword = async (passwordData: any, adminId?: string) => {
-
-    const id = await resolveAdminId(adminId ?? passwordData.adminId ?? passwordData.admin_id);
-    if (!id) return { success: false, message: "Admin not found" };
+/**
+ * Self-service password change — requires the current password. This is
+ * the ONLY password path available to non-SUPER_ADMIN users, including for
+ * their own account.
+ */
+export const changePassword = async (adminId: string, passwordData: any) => {
 
     const { currentPassword, newPassword } = passwordData;
 
     const result = await pool.query(
         `SELECT password_hash FROM admin_user WHERE admin_id = $1`,
-        [id]
+        [adminId]
     );
 
     const admin = result.rows[0];
@@ -141,15 +144,81 @@ export const changePassword = async (passwordData: any, adminId?: string) => {
     await pool.query(
         `UPDATE admin_user SET password_hash = $2, updated_at = CURRENT_TIMESTAMP
          WHERE admin_id = $1`,
-        [id, newHash]
+        [adminId, newHash]
     );
 
     return { success: true, message: "Password changed successfully" };
 };
 
+/**
+ * SUPER_ADMIN-only reset of ANOTHER user's password — no current password
+ * needed, unlike changePassword above. Also where role/account_status
+ * changes live, since those are equally security-sensitive.
+ */
+export const updateSecurity = async (targetAdminId: string, securityData: any) => {
+
+    const { newPassword, role, account_status } = securityData;
+
+    const updates: string[] = [];
+    const values: any[] = [];
+    let i = 2;
+
+    if (newPassword) {
+        const newHash = await bcrypt.hash(newPassword, 10);
+        updates.push(`password_hash = $${i++}`);
+        values.push(newHash);
+    }
+    if (role) {
+        updates.push(`role = $${i++}`);
+        values.push(role);
+    }
+    if (account_status) {
+        updates.push(`account_status = $${i++}`);
+        values.push(account_status);
+        // A fresh ACTIVE status should give a locked-out account a clean
+        // slate rather than instantly re-tripping any lockout logic.
+        if (account_status === "ACTIVE") {
+            updates.push(`failed_login_attempts = 0`);
+        }
+    }
+
+    if (updates.length === 0) {
+        return getProfile(targetAdminId);
+    }
+
+    const result = await pool.query(
+        `UPDATE admin_user
+         SET ${updates.join(", ")}, updated_at = CURRENT_TIMESTAMP
+         WHERE admin_id = $1
+         RETURNING admin_id, employee_id, username, faculty_id, first_name,
+                   last_name, email, role, phone, last_login, account_status, is_active`,
+        [targetAdminId, ...values]
+    );
+
+    return result.rows[0] || null;
+};
+
 export const getAllAdmins = async () => {
     const result = await pool.query(
-        `${SELECT_ADMIN} WHERE is_active = TRUE ORDER BY first_name`
+        `${SELECT_ADMIN} WHERE is_active = TRUE ORDER BY role, first_name`
     );
     return result.rows;
+};
+
+export const getAdminById = async (adminId: string) => {
+    const result = await pool.query(
+        `${SELECT_ADMIN} WHERE admin_id = $1`,
+        [adminId]
+    );
+    return result.rows[0];
+};
+
+export const deactivateAdmin = async (adminId: string) => {
+    const result = await pool.query(
+        `UPDATE admin_user SET is_active = FALSE, updated_at = CURRENT_TIMESTAMP
+         WHERE admin_id = $1
+         RETURNING admin_id`,
+        [adminId]
+    );
+    return { success: (result.rowCount ?? 0) > 0 };
 };

@@ -7,8 +7,11 @@ import {
     markAsRead,
     deleteNotification
 } from "../controllers/NotificationController";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * Notification Routes
@@ -21,12 +24,12 @@ router.get("/", getAllNotifications);
 router.get("/:notificationId", getNotificationById);
 
 // Create Notification
-router.post("/", createNotification);
+router.post("/", requireAdmin, createNotification);
 
 // Mark Notification as Read
 router.put("/:notificationId/read", markAsRead);
 
 // Delete Notification
-router.delete("/:notificationId", deleteNotification);
+router.delete("/:notificationId", requireAdmin, deleteNotification);
 
 export default router;

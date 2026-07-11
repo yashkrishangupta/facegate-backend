@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { API_URL } from '../../lib/config'
+import { useRouter } from 'next/navigation'
+import { apiFetch, isLoggedIn } from '../../lib/auth'
 
 interface TimetableEntry {
   timetable_id: string
@@ -16,13 +17,15 @@ interface TimetableEntry {
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 
 export default function TimetablePage() {
+  const router = useRouter()
   const [entries, setEntries] = useState<TimetableEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [activeDay, setActiveDay] = useState(DAYS[0])
 
   useEffect(() => {
+    if (!isLoggedIn()) { router.push('/login'); return }
     setLoading(true)
-    fetch(`${API_URL}/timetable`)
+    apiFetch('/timetable')
       .then((res) => res.json())
       .then((json) => setEntries(json.data || []))
       .catch(() => setEntries([]))

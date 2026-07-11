@@ -1175,6 +1175,16 @@ CREATE TABLE admin_user (
 
     employee_id VARCHAR(20) NOT NULL UNIQUE,
 
+    -- NEW: generated at faculty-account provisioning time (firstname.lastname,
+    -- deduped with a trailing number). Login is by username, not email —
+    -- faculty don't necessarily have an institutional email on day one.
+    username VARCHAR(50) UNIQUE,
+
+    -- NEW: set only for role = 'FACULTY' accounts created via the Faculty
+    -- page's auto-provisioning flow. Links the login row back to the
+    -- teaching record so "batches I teach" is a simple join.
+    faculty_id UUID UNIQUE,
+
     first_name VARCHAR(50) NOT NULL,
 
     last_name VARCHAR(50) NOT NULL,
@@ -1227,7 +1237,13 @@ CREATE TABLE admin_user (
     CONSTRAINT chk_admin_email
         CHECK (
             email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$'
-        )
+        ),
+
+    CONSTRAINT fk_admin_faculty
+        FOREIGN KEY (faculty_id)
+        REFERENCES faculty(faculty_id)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE
 
 );
 ALTER TABLE holiday

@@ -7,8 +7,11 @@ import {
   updateStudent,
   deleteStudent
 } from "../controllers/StudentController";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * Student Routes
@@ -24,11 +27,11 @@ router.get("/batch/:batchId", getStudentsByBatch);
 router.get("/:studentId", getStudentById);
 
 // Create
-router.post("/", createStudent);
+router.post("/", requireAdmin, createStudent);
 
 // Update
-router.put("/:studentId", updateStudent);
+router.put("/:studentId", requireAdmin, updateStudent);
 
 // Delete
-router.delete("/:studentId", deleteStudent);
+router.delete("/:studentId", requireAdmin, deleteStudent);
 export default router;

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { API_URL } from '../../lib/config'
+import { useRouter } from 'next/navigation'
+import { apiFetch, isLoggedIn } from '../../lib/auth'
 
 interface Holiday {
   holiday_id: string
@@ -11,6 +12,7 @@ interface Holiday {
 }
 
 export default function HolidaysPage() {
+  const router = useRouter()
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -24,20 +26,22 @@ export default function HolidaysPage() {
   const fetchHolidays = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/holidays`)
+      const res = await apiFetch('/holidays')
       const json = await res.json()
       setHolidays(json.data || [])
     } catch { setHolidays([]) } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchHolidays() }, [])
+  useEffect(() => {
+    if (!isLoggedIn()) { router.push('/login'); return }
+    fetchHolidays()
+  }, [])
 
   const handleCreate = async () => {
     setError(''); setSubmitting(true)
     try {
-      const res = await fetch(`${API_URL}/holidays`, {
+      const res = await apiFetch('/holidays', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           holiday_date: form.holidayDate,
           holiday_name: form.holidayName,
@@ -60,7 +64,7 @@ export default function HolidaysPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Remove this holiday?')) return
-    await fetch(`${API_URL}/holidays/${id}`, { method: 'DELETE' }).catch(() => {})
+    await apiFetch(`/holidays/${id}`, { method: 'DELETE' }).catch(() => {})
     fetchHolidays()
   }
 

@@ -6,8 +6,11 @@ import {
     getRecentConflicts,
     getRecentNotifications
 } from "../controllers/DashboardController";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * Dashboard Routes

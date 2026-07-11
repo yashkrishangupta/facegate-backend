@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { API_URL } from '../../lib/config'
+import { useRouter } from 'next/navigation'
+import { apiFetch, isLoggedIn } from '../../lib/auth'
 
 interface Conflict {
   conflict_id: string
@@ -12,6 +13,7 @@ interface Conflict {
 }
 
 export default function ConflictsPage() {
+  const router = useRouter()
   const [conflicts, setConflicts] = useState<Conflict[]>([])
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<Conflict | null>(null)
@@ -22,13 +24,16 @@ export default function ConflictsPage() {
   const fetchConflicts = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/conflicts`)
+      const res = await apiFetch('/conflicts')
       const json = await res.json()
       setConflicts(json.data || [])
     } catch { setConflicts([]) } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchConflicts() }, [])
+  useEffect(() => {
+    if (!isLoggedIn()) { router.push('/login'); return }
+    fetchConflicts()
+  }, [])
 
   // Backend doesn't support server-side status filtering yet — filter client-side.
   const filtered = useMemo(() => conflicts.filter(c => c.status === filter), [conflicts, filter])
@@ -36,7 +41,7 @@ export default function ConflictsPage() {
   const handleResolve = async (id: string) => {
     setResolving(true)
     try {
-      await fetch(`${API_URL}/conflicts/${id}/resolve`, {
+      await apiFetch(`/conflicts/${id}/resolve`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ resolution: resolveNote })
@@ -47,7 +52,7 @@ export default function ConflictsPage() {
 
   const handleDismiss = async (id: string) => {
     if (!confirm('Dismiss this conflict?')) return
-    await fetch(`${API_URL}/conflicts/${id}`, { method: 'DELETE' }).catch(() => {})
+    await apiFetch(`/conflicts/${id}`, { method: 'DELETE' }).catch(() => {})
     fetchConflicts()
   }
 

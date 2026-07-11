@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { API_URL } from '../../lib/config'
+import { useRouter } from 'next/navigation'
+import { apiFetch, isLoggedIn } from '../../lib/auth'
 
 interface Student {
   student_id: string
@@ -19,6 +20,7 @@ interface Student {
 }
 
 export default function StudentsPage() {
+  const router = useRouter()
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -33,13 +35,16 @@ export default function StudentsPage() {
   const fetchStudents = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/students`)
+      const res = await apiFetch('/students')
       const json = await res.json()
       setStudents(json.data || [])
     } catch { setStudents([]) } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchStudents() }, [])
+  useEffect(() => {
+    if (!isLoggedIn()) { router.push('/login'); return }
+    fetchStudents()
+  }, [])
 
   // The backend doesn't support server-side search yet, so we filter
   // client-side against the fields visible in the table.
@@ -56,9 +61,8 @@ export default function StudentsPage() {
   const handleCreate = async () => {
     setError(''); setSubmitting(true)
     try {
-      const res = await fetch(`${API_URL}/students`, {
+      const res = await apiFetch('/students', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           batch_id: form.batchId,
           registration_number: form.registrationNumber,
@@ -84,7 +88,7 @@ export default function StudentsPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete?')) return
-    await fetch(`${API_URL}/students/${id}`, { method: 'DELETE' }).catch(() => {})
+    await apiFetch(`/students/${id}`, { method: 'DELETE' }).catch(() => {})
     fetchStudents()
   }
 

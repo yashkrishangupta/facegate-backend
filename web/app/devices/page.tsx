@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { API_URL } from '../../lib/config'
+import { useRouter } from 'next/navigation'
+import { apiFetch, isLoggedIn } from '../../lib/auth'
 
 interface Device {
   device_id: string
@@ -21,6 +22,7 @@ interface Room {
 }
 
 export default function DevicesPage() {
+  const router = useRouter()
   const [devices, setDevices] = useState<Device[]>([])
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
@@ -36,7 +38,7 @@ export default function DevicesPage() {
   const fetchDevices = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/devices`)
+      const res = await apiFetch('/devices')
       const json = await res.json()
       setDevices(json.data || [])
     } catch { setDevices([]) } finally { setLoading(false) }
@@ -44,20 +46,22 @@ export default function DevicesPage() {
 
   const fetchRooms = async () => {
     try {
-      const res = await fetch(`${API_URL}/rooms`)
+      const res = await apiFetch('/rooms')
       const json = await res.json()
       setRooms(json.data || [])
     } catch { setRooms([]) }
   }
 
-  useEffect(() => { fetchDevices(); fetchRooms() }, [])
+  useEffect(() => {
+    if (!isLoggedIn()) { router.push('/login'); return }
+    fetchDevices(); fetchRooms()
+  }, [])
 
   const handleCreate = async () => {
     setError(''); setSubmitting(true)
     try {
-      const res = await fetch(`${API_URL}/devices`, {
+      const res = await apiFetch('/devices', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           room_id: form.roomId,
           device_name: form.deviceName
@@ -79,7 +83,7 @@ export default function DevicesPage() {
 
   const handleDeactivate = async (id: string) => {
     if (!confirm('Deactivate this device?')) return
-    await fetch(`${API_URL}/devices/${id}`, { method: 'DELETE' }).catch(() => {})
+    await apiFetch(`/devices/${id}`, { method: 'DELETE' }).catch(() => {})
     fetchDevices()
   }
 

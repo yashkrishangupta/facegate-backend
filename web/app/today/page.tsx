@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { API_URL } from '../../lib/config'
+import { useRouter } from 'next/navigation'
+import { apiFetch, isLoggedIn } from '../../lib/auth'
 
 interface TimetableEntry {
   timetable_id: string
@@ -13,15 +14,17 @@ interface TimetableEntry {
 }
 
 export default function TodayPage() {
+  const router = useRouter()
   const [sessions, setSessions] = useState<TimetableEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({ scheduledToday: '—', presentToday: '—', activeDevices: '—' })
 
   useEffect(() => {
+    if (!isLoggedIn()) { router.push('/login'); return }
     setLoading(true)
     Promise.all([
-      fetch(`${API_URL}/timetable/today`).then((r) => r.json()),
-      fetch(`${API_URL}/dashboard/summary`).then((r) => r.json())
+      apiFetch('/timetable/today').then((r) => r.json()),
+      apiFetch('/dashboard/summary').then((r) => r.json())
     ])
       .then(([timetableJson, dashboardJson]) => {
         setSessions(timetableJson.data || [])

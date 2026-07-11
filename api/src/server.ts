@@ -18,6 +18,11 @@ import notificationRoutes from "./routes/notifications";
 import adminRoutes from "./routes/admin";
 import dashboardRoutes from "./routes/dashboard";
 import reportRoutes from "./routes/reports";
+import facultyRoutes from "./routes/faculty";
+import departmentRoutes from "./routes/departments";
+import subjectRoutes from "./routes/subjects";
+import academicCalendarRoutes from "./routes/academicCalendar";
+import changeLogRoutes from "./routes/changeLog";
 
 const app = express();
 
@@ -54,6 +59,11 @@ app.use("/api/v1/notifications", notificationRoutes);
 app.use("/api/v1/dashboard", dashboardRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/reports", reportRoutes);
+app.use("/api/v1/faculty", facultyRoutes);
+app.use("/api/v1/departments", departmentRoutes);
+app.use("/api/v1/subjects", subjectRoutes);
+app.use("/api/v1/academic-calendar", academicCalendarRoutes);
+app.use("/api/v1/change-log", changeLogRoutes);
 // Error handler must be last
 app.use(errorHandler);
 

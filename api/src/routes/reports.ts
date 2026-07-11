@@ -7,8 +7,14 @@ import {
     getDepartmentReport,
     getSummaryReport
 } from "../controllers/ReportController";
+import { requireAuth } from "../middleware/auth";
 
 const router = Router();
+
+// NOTE: open to any authenticated role, including FACULTY — per-faculty
+// row scoping ("only batches I teach") is NOT yet enforced inside
+// ReportRepository's queries. Flagging as follow-up, not silently skipping.
+router.use(requireAuth);
 
 /**
  * Report Routes

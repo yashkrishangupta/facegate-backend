@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as RoomService from "../services/RoomService";
+import * as ChangeLogRepository from "../repositories/ChangeLogRepository";
 
 /**
  * Get All Rooms
@@ -78,6 +79,10 @@ export const createRoom = async (
 
         const room = await RoomService.createRoom(req.body);
 
+        await ChangeLogRepository.recordChange(
+            req.user?.adminId ?? null, "room", room.room_id, "CREATE", null, room
+        );
+
         res.status(201).json({
             success: true,
             message: "Room created successfully",
@@ -108,6 +113,10 @@ export const updateRoom = async (
         const roomId = req.params.roomId as string;
         const room = await RoomService.updateRoom(roomId, req.body);
 
+        await ChangeLogRepository.recordChange(
+            req.user?.adminId ?? null, "room", roomId, "UPDATE", null, req.body
+        );
+
         res.status(200).json({
             success: true,
             message: "Room updated successfully",
@@ -137,6 +146,10 @@ export const deactivateRoom = async (
 
         const roomId = req.params.roomId as string;
         const result = await RoomService.deactivateRoom(roomId);
+
+        await ChangeLogRepository.recordChange(
+            req.user?.adminId ?? null, "room", roomId, "DELETE"
+        );
 
         res.status(200).json({
             success: true,

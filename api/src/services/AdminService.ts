@@ -1,47 +1,47 @@
 import * as AdminRepository from "../repositories/AdminRepository";
 
-/**
- * Login
- */
 export const login = async (loginData: any) => {
+    if (!loginData?.username || !loginData?.password) {
+        throw new Error("username and password are required");
+    }
     return await AdminRepository.login(loginData);
 };
 
-/**
- * Logout
- */
 export const logout = async () => {
     return await AdminRepository.logout();
 };
 
-/**
- * Get Profile
- */
-export const getProfile = async () => {
-    return await AdminRepository.getProfile();
+export const getProfile = async (adminId: string) => {
+    return await AdminRepository.getProfile(adminId);
+};
+
+export const updateProfile = async (adminId: string, profileData: any) => {
+    return await AdminRepository.updateProfile(adminId, profileData);
+};
+
+export const changePassword = async (adminId: string, passwordData: any) => {
+    if (!passwordData?.currentPassword || !passwordData?.newPassword) {
+        throw new Error("currentPassword and newPassword are required");
+    }
+    return await AdminRepository.changePassword(adminId, passwordData);
 };
 
 /**
- * Update Profile
+ * SUPER_ADMIN only, enforced at the route level (requireSuperAdmin) — this
+ * function trusts the caller has already been authorized.
  */
-export const updateProfile = async (
-    profileData: any
-) => {
-    return await AdminRepository.updateProfile(profileData);
+export const updateSecurity = async (targetAdminId: string, securityData: any) => {
+    return await AdminRepository.updateSecurity(targetAdminId, securityData);
 };
 
-/**
- * Change Password
- */
-export const changePassword = async (
-    passwordData: any
-) => {
-    return await AdminRepository.changePassword(passwordData);
-};
-
-/**
- * Get All Admins
- */
 export const getAllAdmins = async () => {
     return await AdminRepository.getAllAdmins();
+};
+
+export const getAdminById = async (adminId: string) => {
+    return await AdminRepository.getAdminById(adminId);
+};
+
+export const deactivateAdmin = async (adminId: string) => {
+    return await AdminRepository.deactivateAdmin(adminId);
 };

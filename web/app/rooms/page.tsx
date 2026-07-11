@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { API_URL } from '../../lib/config'
+import { useRouter } from 'next/navigation'
+import { apiFetch, isLoggedIn } from '../../lib/auth'
 
 interface Room {
   room_id: string
@@ -15,6 +16,7 @@ interface Room {
 const ROOM_TYPES = ['Lecture Hall', 'Laboratory', 'Seminar Hall', 'Tutorial Room', 'Conference Room']
 
 export default function RoomsPage() {
+  const router = useRouter()
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -28,20 +30,22 @@ export default function RoomsPage() {
   const fetchRooms = async () => {
     setLoading(true)
     try {
-      const res = await fetch(`${API_URL}/rooms`)
+      const res = await apiFetch('/rooms')
       const json = await res.json()
       setRooms(json.data || [])
     } catch { setRooms([]) } finally { setLoading(false) }
   }
 
-  useEffect(() => { fetchRooms() }, [])
+  useEffect(() => {
+    if (!isLoggedIn()) { router.push('/login'); return }
+    fetchRooms()
+  }, [])
 
   const handleCreate = async () => {
     setError(''); setSubmitting(true)
     try {
-      const res = await fetch(`${API_URL}/rooms`, {
+      const res = await apiFetch('/rooms', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           room_number: form.roomNumber,
           room_name: form.roomName || undefined,

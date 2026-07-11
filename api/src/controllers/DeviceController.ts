@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import * as DeviceService from "../services/DeviceService";
+import * as ChangeLogRepository from "../repositories/ChangeLogRepository";
 
 /**
  * Get All Devices
@@ -72,6 +73,11 @@ export const createPendingDevice = async (
     try {
 
         const device = await DeviceService.createPendingDevice(req.body);
+
+        await ChangeLogRepository.recordChange(
+            req.user?.adminId ?? null, "device", device.device_id, "CREATE", null,
+            { room_id: device.room_id, device_name: device.device_name }
+        );
 
         res.status(201).json({
             success: true,
@@ -150,6 +156,10 @@ export const updateDevice = async (
         const device = await DeviceService.updateDevice(
             deviceId,
             req.body
+        );
+
+        await ChangeLogRepository.recordChange(
+            req.user?.adminId ?? null, "device", deviceId, "UPDATE", null, req.body
         );
 
         res.status(200).json({
@@ -250,6 +260,10 @@ export const deactivateDevice = async (
         const deviceId = req.params.deviceId as string;
 
         const result = await DeviceService.deactivateDevice(deviceId);
+
+        await ChangeLogRepository.recordChange(
+            req.user?.adminId ?? null, "device", deviceId, "DELETE"
+        );
 
         res.status(200).json({
             success: true,

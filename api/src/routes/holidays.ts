@@ -7,8 +7,11 @@ import {
     updateHoliday,
     deleteHoliday
 } from "../controllers/HolidayController";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * Holiday Routes
@@ -21,12 +24,12 @@ router.get("/", getAllHolidays);
 router.get("/:holidayId", getHolidayById);
 
 // Create Holiday
-router.post("/", createHoliday);
+router.post("/", requireAdmin, createHoliday);
 
 // Update Holiday
-router.put("/:holidayId", updateHoliday);
+router.put("/:holidayId", requireAdmin, updateHoliday);
 
 // Delete Holiday
-router.delete("/:holidayId", deleteHoliday);
+router.delete("/:holidayId", requireAdmin, deleteHoliday);
 
 export default router;

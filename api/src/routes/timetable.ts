@@ -9,8 +9,11 @@ import {
     updateTimetable,
     deleteTimetable
 } from "../controllers/TimetableController";
+import { requireAuth, requireAdmin } from "../middleware/auth";
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * Timetable Routes
@@ -29,12 +32,12 @@ router.get("/faculty/:facultyId", getTimetableByFaculty);
 router.get("/", getAllTimetable);
 
 // Create
-router.post("/", createTimetable);
+router.post("/", requireAdmin, createTimetable);
 
 // Update
-router.put("/:timetableId", updateTimetable);
+router.put("/:timetableId", requireAdmin, updateTimetable);
 
 // Delete
-router.delete("/:timetableId", deleteTimetable);
+router.delete("/:timetableId", requireAdmin, deleteTimetable);
 
 export default router;
