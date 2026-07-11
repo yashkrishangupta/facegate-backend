@@ -14,6 +14,9 @@ const SELECT_CONFLICT = `
         c.student_id,
         s.first_name || ' ' || s.last_name AS student_name,
         c.device_id,
+        dv.device_name,
+        dv.room_id,
+        r.room_number,
         c.conflict_type,
         c.severity,
         c.conflict_status AS status,
@@ -25,11 +28,42 @@ const SELECT_CONFLICT = `
         c.is_active
     FROM conflict c
     LEFT JOIN student s ON s.student_id = c.student_id
+    LEFT JOIN device dv ON dv.device_id = c.device_id
+    LEFT JOIN room r ON r.room_id = dv.room_id
 `;
 
 export const getAllConflicts = async () => {
     const result = await pool.query(
         `${SELECT_CONFLICT} WHERE c.is_active = TRUE ORDER BY c.created_at DESC`
+    );
+    return result.rows;
+};
+
+/**
+ * Filtered list — backs the Conflict Queue's status / severity / type /
+ * room / date-range filter row.
+ */
+export const getFilteredConflicts = async (filters: {
+    status?: string;
+    severity?: string;
+    conflict_type?: string;
+    room_id?: string;
+    from_date?: string;
+    to_date?: string;
+}) => {
+    const conditions = ["c.is_active = TRUE"];
+    const values: any[] = [];
+
+    if (filters.status) { values.push(filters.status); conditions.push(`c.conflict_status = $${values.length}`); }
+    if (filters.severity) { values.push(filters.severity); conditions.push(`c.severity = $${values.length}`); }
+    if (filters.conflict_type) { values.push(filters.conflict_type); conditions.push(`c.conflict_type = $${values.length}`); }
+    if (filters.room_id) { values.push(filters.room_id); conditions.push(`dv.room_id = $${values.length}`); }
+    if (filters.from_date) { values.push(filters.from_date); conditions.push(`c.created_at >= $${values.length}`); }
+    if (filters.to_date) { values.push(filters.to_date); conditions.push(`c.created_at <= $${values.length}`); }
+
+    const result = await pool.query(
+        `${SELECT_CONFLICT} WHERE ${conditions.join(" AND ")} ORDER BY c.created_at DESC`,
+        values
     );
     return result.rows;
 };

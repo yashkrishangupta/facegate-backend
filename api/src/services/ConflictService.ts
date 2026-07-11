@@ -1,10 +1,13 @@
 import * as ConflictRepository from "../repositories/ConflictRepository";
 
 /**
- * Get All Conflicts
+ * Get All Conflicts, optionally filtered by status / severity / type / room / date range.
  */
-export const getAllConflicts = async () => {
-    return await ConflictRepository.getAllConflicts();
+export const getAllConflicts = async (filters: any = {}) => {
+    const hasFilters = Object.values(filters).some(v => v);
+    return hasFilters
+        ? await ConflictRepository.getFilteredConflicts(filters)
+        : await ConflictRepository.getAllConflicts();
 };
 
 /**

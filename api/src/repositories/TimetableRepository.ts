@@ -11,6 +11,10 @@ const SELECT_TIMETABLE = `
         t.timetable_id,
         t.batch_id,
         b.batch_code,
+        b.academic_year,
+        b.program_id,
+        pr.program_name AS program,
+        b.semester AS batch_semester,
         t.faculty_id,
         f.first_name || ' ' || f.last_name AS faculty_name,
         t.subject_id,
@@ -28,6 +32,7 @@ const SELECT_TIMETABLE = `
         t.is_active
     FROM timetable t
     JOIN batch b ON b.batch_id = t.batch_id
+    JOIN program pr ON pr.program_id = b.program_id
     JOIN faculty f ON f.faculty_id = t.faculty_id
     JOIN subject sub ON sub.subject_id = t.subject_id
     JOIN room r ON r.room_id = t.room_id
@@ -36,6 +41,33 @@ const SELECT_TIMETABLE = `
 export const getAllTimetable = async () => {
     const result = await pool.query(
         `${SELECT_TIMETABLE} WHERE t.is_active = TRUE ORDER BY t.day_of_week, t.start_time`
+    );
+    return result.rows;
+};
+
+/**
+ * Filtered list — backs the Timetable page's Academic Year / Program /
+ * Semester / Batch / Room filter row.
+ */
+export const getFilteredTimetable = async (filters: {
+    academic_year?: string;
+    program_id?: string;
+    semester?: string;
+    batch_id?: string;
+    room_id?: string;
+}) => {
+    const conditions = ["t.is_active = TRUE"];
+    const values: any[] = [];
+
+    if (filters.academic_year) { values.push(filters.academic_year); conditions.push(`b.academic_year = $${values.length}`); }
+    if (filters.program_id) { values.push(filters.program_id); conditions.push(`b.program_id = $${values.length}`); }
+    if (filters.semester) { values.push(filters.semester); conditions.push(`b.semester = $${values.length}`); }
+    if (filters.batch_id) { values.push(filters.batch_id); conditions.push(`t.batch_id = $${values.length}`); }
+    if (filters.room_id) { values.push(filters.room_id); conditions.push(`t.room_id = $${values.length}`); }
+
+    const result = await pool.query(
+        `${SELECT_TIMETABLE} WHERE ${conditions.join(" AND ")} ORDER BY t.day_of_week, t.start_time`,
+        values
     );
     return result.rows;
 };

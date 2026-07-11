@@ -45,17 +45,16 @@ export default function Home() {
   }
 
   const tiles = [
-    { title: "Rooms", desc: "Create rooms for device pairing", href: "/rooms", color: "#5DA9FF" },
-    { title: "Devices", desc: "Monitor registered devices", href: "/devices", color: "#4ADE80" },
     { title: "Students", desc: "Manage enrolled students", href: "/students", color: "#5DA9FF" },
-    { title: "Timetable", desc: "Setup weekly schedule", href: "/timetable", color: "#F59E0B" },
-    { title: "Today", desc: "Live status across all rooms", href: "/today", color: "#38BDF8" },
+    { title: "Rooms", desc: "Create rooms for device pairing", href: "/rooms", color: "#5DA9FF", adminOnly: true },
+    { title: "Devices", desc: "Monitor registered devices", href: "/devices", color: "#4ADE80", adminOnly: true },
     { title: "Attendance Reports", desc: "View, filter, correct attendance", href: "/reports", color: "#A78BFA" },
+    { title: "Today", desc: "Live status across all rooms", href: "/today", color: "#38BDF8" },
+    { title: "Timetable", desc: "Setup weekly schedule", href: "/timetable", color: "#F59E0B" },
     { title: "Holidays", desc: "Manage holidays", href: "/holidays", color: "#F87171" },
     { title: "Conflicts", desc: "Resolve face recognition conflicts", href: "/conflicts", color: "#FB923C" },
-    { title: "Faculty", desc: "Manage faculty + their logins", href: "/faculty", color: "#4ADE80", adminOnly: true },
-    { title: "Master Data", desc: "Departments, subjects, calendar", href: "/master-data", color: "#5DA9FF", adminOnly: true },
     { title: "Change Log", desc: "Audit trail of admin actions", href: "/change-log", color: "#90A6BD", adminOnly: true },
+    { title: "Master Data", desc: "Departments, programs, batches, subjects, faculty, calendar", href: "/master-data", color: "#5DA9FF", adminOnly: true },
   ]
 
   return (

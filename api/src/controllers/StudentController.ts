@@ -9,7 +9,10 @@ export const getAllStudents = async (
     res: Response
 ): Promise<void> => {
     try {
-        const students = await StudentService.getAllStudents();
+        const { academic_year, program_id, semester, batch_id, department_id } = req.query;
+        const students = await StudentService.getAllStudents({
+            academic_year, program_id, semester, batch_id, department_id
+        });
 
         res.status(200).json({
             success: true,
@@ -105,10 +108,10 @@ export const createStudent = async (
             data: student
         });
 
-    } catch (error) {
-        res.status(500).json({
+    } catch (error: any) {
+        res.status(400).json({
             success: false,
-            message: "Failed to create student"
+            message: error?.message || "Failed to create student"
         });
     }
 

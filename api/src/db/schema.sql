@@ -66,6 +66,44 @@ CREATE TABLE department (
         )
 );
 -- ==========================================================
+-- TABLE: Program
+-- Description: NEW — previously "program" was just a hardcoded
+-- VARCHAR + CHECK list on batch and subject (B.Tech/M.Tech/PhD/MBA/MCA),
+-- not a real table. This is a proper master-data table now; batch and
+-- subject both FK into it below instead of duplicating the CHECK list.
+-- ==========================================================
+
+CREATE TABLE program (
+
+    program_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+
+    program_code VARCHAR(20) NOT NULL UNIQUE,
+
+    program_name VARCHAR(100) NOT NULL,
+
+    degree_type VARCHAR(20) NOT NULL,
+
+    duration_years INTEGER NOT NULL,
+
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+
+    CONSTRAINT chk_degree_type
+        CHECK (
+            degree_type IN ('UG', 'PG', 'Doctoral')
+        ),
+
+    CONSTRAINT chk_duration
+        CHECK (
+            duration_years > 0
+        )
+
+);
+
+-- ==========================================================
 -- TABLE: Batch
 -- Description: Stores batch and section information.
 -- ==========================================================
@@ -78,7 +116,7 @@ CREATE TABLE batch (
 
     batch_code VARCHAR(20) NOT NULL UNIQUE,
 
-    program VARCHAR(20) NOT NULL,
+    program_id UUID NOT NULL,
 
     academic_year VARCHAR(9) NOT NULL,
 
@@ -102,16 +140,11 @@ CREATE TABLE batch (
         ON DELETE RESTRICT
         ON UPDATE CASCADE,          
 
-    CONSTRAINT chk_program
-        CHECK (
-            program IN (
-                'B.Tech',
-                'M.Tech',
-                'PhD',
-                'MBA',
-                'MCA'
-            )
-        ),
+    CONSTRAINT fk_batch_program
+        FOREIGN KEY (program_id)
+        REFERENCES program(program_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
 
     CONSTRAINT chk_semester
         CHECK (
@@ -194,7 +227,7 @@ CREATE TABLE subject (
 
     subject_name VARCHAR(100) NOT NULL,
 
-    program VARCHAR(20) NOT NULL,
+    program_id UUID NOT NULL,
 
     semester INTEGER NOT NULL,
 
@@ -229,16 +262,11 @@ CREATE TABLE subject (
         )
     ),    
 
-    CONSTRAINT chk_subject_program
-        CHECK (
-            program IN (
-                'B.Tech',
-                'M.Tech',
-                'PhD',
-                'MBA',
-                'MCA'
-            )
-        ),
+    CONSTRAINT fk_subject_program
+        FOREIGN KEY (program_id)
+        REFERENCES program(program_id)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
 
     CONSTRAINT chk_subject_semester
         CHECK (

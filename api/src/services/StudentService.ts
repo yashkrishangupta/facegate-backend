@@ -1,10 +1,14 @@
 import * as StudentRepository from "../repositories/StudentRepository";
 
 /**
- * Get all students
+ * Get all students, optionally filtered by academic year / program /
+ * semester / batch / department.
  */
-export const getAllStudents = async () => {
-    return await StudentRepository.getAllStudents();
+export const getAllStudents = async (filters: any = {}) => {
+    const hasFilters = Object.values(filters).some(v => v);
+    return hasFilters
+        ? await StudentRepository.getFilteredStudents(filters)
+        : await StudentRepository.getAllStudents();
 };
 
 /**
@@ -26,11 +30,12 @@ export const getStudentsByBatch = async (batchId: string) => {
  */
 export const createStudent = async (studentData: any) => {
 
-    // Business logic can be added here later
-    // Example:
-    // - Validate email
-    // - Check duplicate roll number
-    // - Validate batch
+    const required = ["batch_id", "registration_number", "roll_number", "first_name", "last_name", "gender", "admission_year"];
+    for (const field of required) {
+        if (studentData[field] === undefined || studentData[field] === null || studentData[field] === "") {
+            throw new Error(`${field} is required`);
+        }
+    }
 
     return await StudentRepository.createStudent(studentData);
 };

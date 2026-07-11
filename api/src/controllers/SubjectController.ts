@@ -3,10 +3,10 @@ import * as SubjectService from "../services/SubjectService";
 
 export const getAllSubjects = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { program, semester, department_id } = req.query;
+        const { program_id, semester, department_id } = req.query;
         res.status(200).json({
             success: true,
-            data: await SubjectService.getAllSubjects({ program, semester, department_id })
+            data: await SubjectService.getAllSubjects({ program_id, semester, department_id })
         });
     } catch {
         res.status(500).json({ success: false, message: "Failed to fetch subjects" });

@@ -11,7 +11,10 @@ export const getAllTimetable = async (
 
     try {
 
-        const timetable = await TimetableService.getAllTimetable();
+        const { academic_year, program_id, semester, batch_id, room_id } = req.query;
+        const timetable = await TimetableService.getAllTimetable({
+            academic_year, program_id, semester, batch_id, room_id
+        });
 
         res.status(200).json({
             success: true,
@@ -138,11 +141,11 @@ export const createTimetable = async (
             data: timetable
         });
 
-    } catch {
+    } catch (err: any) {
 
-        res.status(500).json({
+        res.status(400).json({
             success: false,
-            message: "Failed to create timetable"
+            message: err?.message || "Failed to create timetable"
         });
 
     }

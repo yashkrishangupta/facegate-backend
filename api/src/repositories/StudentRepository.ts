@@ -23,16 +23,49 @@ const SELECT_STUDENT = `
         s.student_status,
         s.is_active,
         b.batch_code,
+        b.academic_year,
+        b.program_id,
+        p.program_name AS program,
         b.semester,
+        b.section,
+        b.department_id,
         d.department_name AS department
     FROM student s
     JOIN batch b ON b.batch_id = s.batch_id
+    JOIN program p ON p.program_id = b.program_id
     JOIN department d ON d.department_id = b.department_id
 `;
 
 export const getAllStudents = async () => {
     const result = await pool.query(
         `${SELECT_STUDENT} WHERE s.is_active = TRUE ORDER BY s.first_name`
+    );
+    return result.rows;
+};
+
+/**
+ * Filtered list — backs the Students page's Academic Year / Program /
+ * Semester / Batch filter row. All filters are optional and AND together.
+ */
+export const getFilteredStudents = async (filters: {
+    academic_year?: string;
+    program_id?: string;
+    semester?: string;
+    batch_id?: string;
+    department_id?: string;
+}) => {
+    const conditions = ["s.is_active = TRUE"];
+    const values: any[] = [];
+
+    if (filters.academic_year) { values.push(filters.academic_year); conditions.push(`b.academic_year = $${values.length}`); }
+    if (filters.program_id) { values.push(filters.program_id); conditions.push(`b.program_id = $${values.length}`); }
+    if (filters.semester) { values.push(filters.semester); conditions.push(`b.semester = $${values.length}`); }
+    if (filters.batch_id) { values.push(filters.batch_id); conditions.push(`s.batch_id = $${values.length}`); }
+    if (filters.department_id) { values.push(filters.department_id); conditions.push(`b.department_id = $${values.length}`); }
+
+    const result = await pool.query(
+        `${SELECT_STUDENT} WHERE ${conditions.join(" AND ")} ORDER BY s.first_name`,
+        values
     );
     return result.rows;
 };

@@ -11,7 +11,10 @@ export const getAllConflicts = async (
 
     try {
 
-        const conflicts = await ConflictService.getAllConflicts();
+        const { status, severity, conflict_type, room_id, from_date, to_date } = req.query;
+        const conflicts = await ConflictService.getAllConflicts({
+            status, severity, conflict_type, room_id, from_date, to_date
+        });
 
         res.status(200).json({
             success: true,
