@@ -18,10 +18,14 @@ export const getDepartmentById = async (departmentId: string) => {
 
 export const createDepartment = async (data: any) => {
     const { department_code, department_name, hod_name, email, phone } = data;
+    // Empty string is NOT the same as omitted — `email: ''` would fail
+    // chk_department_email (which only allows NULL or a valid regex match,
+    // not an empty string), so blank optional fields need to become NULL,
+    // not pass through as ''.
     const result = await pool.query(
         `INSERT INTO department (department_code, department_name, hod_name, email, phone)
          VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-        [department_code, department_name, hod_name ?? null, email ?? null, phone ?? null]
+        [department_code, department_name, hod_name || null, email || null, phone || null]
     );
     return result.rows[0];
 };

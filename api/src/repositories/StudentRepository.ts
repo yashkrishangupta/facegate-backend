@@ -114,7 +114,7 @@ export const createStudent = async (studentData: any) => {
             roll_number,
             first_name,
             last_name,
-            email ?? null,
+            email || null,
             phone ?? null,
             gender,
             date_of_birth ?? null,
