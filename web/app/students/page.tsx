@@ -19,6 +19,8 @@ interface Student {
   program?: string
   semester?: number
   department?: string
+  enrollment_status?: 'ENROLLED' | 'NOT_ENROLLED'
+  enrolled_on?: string
 }
 
 interface Batch {
@@ -200,13 +202,13 @@ export default function StudentsPage() {
         <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] overflow-hidden">
           <table className="w-full">
             <thead><tr className="border-b border-[#2F4E73]">
-              {['Roll No', 'Name', 'Batch', 'Program', 'Semester', 'Status', 'Actions'].map(h => (
+              {['Roll No', 'Name', 'Batch', 'Program', 'Semester', 'Enrollment', 'Status', 'Actions'].map(h => (
                 <th key={h} className="text-left p-4 text-[#90A6BD] text-sm font-bold">{h}</th>
               ))}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={7} className="text-center text-[#90A6BD] p-8">Loading...</td></tr>
-              : filteredBySearch.length === 0 ? <tr><td colSpan={7} className="text-center text-[#90A6BD] p-8">No students found.</td></tr>
+              {loading ? <tr><td colSpan={8} className="text-center text-[#90A6BD] p-8">Loading...</td></tr>
+              : filteredBySearch.length === 0 ? <tr><td colSpan={8} className="text-center text-[#90A6BD] p-8">No students found.</td></tr>
               : filteredBySearch.map((s) => (
                 <tr key={s.student_id} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
                   <td className="p-4 text-[#5DA9FF] font-mono text-sm">{s.roll_number}</td>
@@ -214,6 +216,11 @@ export default function StudentsPage() {
                   <td className="p-4 text-[#90A6BD]">{s.batch_code || '—'}</td>
                   <td className="p-4 text-[#90A6BD]">{s.program || '—'}</td>
                   <td className="p-4 text-[#90A6BD]">{s.semester ?? '—'}</td>
+                  <td className="p-4">
+                    <span className={`text-xs px-2 py-1 rounded-full ${s.enrollment_status === 'ENROLLED' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A00] text-[#F59E0B]'}`}>
+                      {s.enrollment_status === 'ENROLLED' ? 'Enrolled' : 'Not Enrolled'}
+                    </span>
+                  </td>
                   <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full ${s.student_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A00] text-[#F59E0B]'}`}>{s.student_status || 'ACTIVE'}</span></td>
                   <td className="p-4"><button onClick={() => handleDelete(s.student_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button></td>
                 </tr>

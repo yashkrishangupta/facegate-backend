@@ -419,6 +419,7 @@ function SubjectsTab() {
 function FacultyTab() {
   const admin = getAdmin()
   const canManage = admin?.role === 'SUPER_ADMIN' || admin?.role === 'ADMIN'
+  const isSuperAdmin = admin?.role === 'SUPER_ADMIN'
 
   const [faculty, setFaculty] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
@@ -431,6 +432,15 @@ function FacultyTab() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [createdUsername, setCreatedUsername] = useState('')
+
+  // Password reset — SUPER_ADMIN only, no current password needed (this
+  // is a reset, not a self-service change). Nobody, including
+  // SUPER_ADMIN, can ever view an existing password — bcrypt hashing is
+  // one-way and the plaintext is never stored anywhere, by design.
+  const [resetTarget, setResetTarget] = useState<any | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetting, setResetting] = useState(false)
 
   const fetchFaculty = async () => {
     setLoading(true)
@@ -462,6 +472,20 @@ function FacultyTab() {
     fetchFaculty()
   }
 
+  const handleResetPassword = async () => {
+    if (!resetTarget?.admin_id) return
+    setResetError(''); setResetting(true)
+    try {
+      const res = await apiFetch(`/admin/${resetTarget.admin_id}/security`, {
+        method: 'PUT',
+        body: JSON.stringify({ newPassword })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setResetError(json.message || 'Failed to reset password'); return }
+      setResetTarget(null); setNewPassword('')
+    } catch { setResetError('Network error') } finally { setResetting(false) }
+  }
+
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
@@ -488,7 +512,12 @@ function FacultyTab() {
                 <p>Email: <span className="text-white">{f.email}</span></p>
               </div>
               {canManage && (
-                <button onClick={() => handleDeactivate(f.faculty_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+                <div className="flex gap-4 mt-4">
+                  <button onClick={() => handleDeactivate(f.faculty_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+                  {isSuperAdmin && f.admin_id && (
+                    <button onClick={() => { setResetTarget(f); setNewPassword(''); setResetError('') }} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Reset Password</button>
+                  )}
+                </div>
               )}
             </div>
           ))}
@@ -526,6 +555,24 @@ function FacultyTab() {
               </div>
             </>
           )}
+        </Modal>
+      )}
+      {resetTarget && (
+        <Modal title={`Reset Password — ${resetTarget.first_name} ${resetTarget.last_name}`} onClose={() => setResetTarget(null)}>
+          <p className="text-[#90A6BD] text-sm mb-4">
+            No current password needed — this is a direct reset, only SUPER_ADMIN can do this.
+            Share the new password with {resetTarget.first_name} directly; they can change it themselves afterward.
+          </p>
+          {resetError && <p className="text-[#F87171] text-sm mb-3">{resetError}</p>}
+          <input placeholder="New Password (min 8 chars)" type="password" value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)} className={`w-full ${inputCls}`} />
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setResetTarget(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleResetPassword} disabled={resetting || newPassword.length < 8}
+              className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
+              {resetting ? 'Resetting...' : 'Reset Password'}
+            </button>
+          </div>
         </Modal>
       )}
     </div>

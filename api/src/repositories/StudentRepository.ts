@@ -29,11 +29,22 @@ const SELECT_STUDENT = `
         b.semester,
         b.section,
         b.department_id,
-        d.department_name AS department
+        d.department_name AS department,
+        -- Enrollment status derived from face_embedding, but the
+        -- embedding vector itself (fe.embedding_data) is never selected
+        -- here or anywhere in this query — visible to every role, unlike
+        -- the biometric data it's derived from.
+        CASE
+            WHEN fe.embedding_id IS NOT NULL AND fe.embedding_status = 'ACTIVE'
+            THEN 'ENROLLED'
+            ELSE 'NOT_ENROLLED'
+        END AS enrollment_status,
+        fe.enrolled_on
     FROM student s
     JOIN batch b ON b.batch_id = s.batch_id
     JOIN program p ON p.program_id = b.program_id
     JOIN department d ON d.department_id = b.department_id
+    LEFT JOIN face_embedding fe ON fe.student_id = s.student_id AND fe.is_active = TRUE
 `;
 
 export const getAllStudents = async () => {
