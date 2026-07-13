@@ -25,3 +25,19 @@ export const uploadEmbedding = async (deviceId: string, embeddingData: any) => {
     }
     return await SyncRepository.uploadEmbedding(deviceId, embeddingData);
 };
+
+export const enrollStudent = async (deviceId: string, enrollData: any) => {
+    return await SyncRepository.enrollStudent(deviceId, enrollData);
+};
+
+export const uploadConflicts = async (deviceId: string, conflictData: any) => {
+    return await SyncRepository.uploadConflicts(deviceId, conflictData);
+};
+
+export const resolveConflict = async (deviceId: string, conflictId: string, status: string) => {
+    return await SyncRepository.resolveConflictAsDevice(deviceId, conflictId, status);
+};
+
+export const getReports = async (deviceId: string, roomId: string, since?: string) => {
+    return await SyncRepository.getReports(deviceId, roomId, since);
+};

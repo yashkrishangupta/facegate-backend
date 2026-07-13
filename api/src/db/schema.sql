@@ -967,7 +967,12 @@ CREATE TABLE device_sync_log (
                 'HOLIDAY_SYNC',
                 'TIMETABLE_SYNC',
                 'STUDENT_SYNC',
-                'FACE_SYNC'
+                'FACE_SYNC',
+                'STUDENT_ENROLLMENT',
+                'CONFLICT_UPLOAD',
+                'CONFLICT_RESOLVE',
+                'REPORTS_PULL',
+                'CHANGE_LOG_UP'
             )
         ),
 

@@ -61,9 +61,43 @@ export const getDeviceById = async (
 };
 
 /**
- * Get Device Health — previously documented in an early contract draft but
- * never built; device_sync_log has been recording this data all along.
+ * GET /devices/me — device-authed self-check. Both API_CONTRACT.md §9 and
+ * the feature doc's §3.2 Step 4 document GET /devices/{deviceId} as
+ * "public, no auth needed" specifically so a device can poll its own room
+ * assignment and detect a reassignment. That's not what the actual route
+ * does — devices.ts has requireAuth on GET /:deviceId, so a device's
+ * x-api-key always gets 401 there (see DeviceApi.kt's doc comment on
+ * getDeviceDetails, which is defined but deliberately left unwired for
+ * exactly this reason). Rather than weaken the admin route or mix the two
+ * credential systems on one endpoint, this gives devices their own
+ * purpose-built equivalent — never returns device_token.
  */
+export const getOwnDevice = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const deviceId = (req as any).device.device_id;
+
+        const device = await DeviceService.getDeviceById(deviceId);
+
+        res.status(200).json({
+            success: true,
+            data: device
+        });
+
+    } catch {
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch device"
+        });
+
+    }
+
+};
 export const getDeviceHealth = async (
     req: Request,
     res: Response
@@ -337,6 +371,53 @@ export const deactivateDevice = async (
         res.status(500).json({
             success: false,
             message: "Failed to deactivate device"
+        });
+
+    }
+
+};
+
+/**
+ * POST /devices/change-log — device-authed equivalent of the website's
+ * ADMIN+/JWT-only GET /change-log. Writes each event through the same
+ * ChangeLogRepository.recordChange used everywhere else, with admin_id
+ * left null (a device has no admin_user row) and the device's own
+ * identity/description/timestamp carried in new_values instead, since
+ * change_log has no dedicated column for either.
+ */
+export const pushChangeLogEvents = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const deviceId = (req as any).device.device_id;
+        const events: any[] = req.body?.events ?? [];
+
+        for (const event of events) {
+            await ChangeLogRepository.recordChange(
+                null,
+                event.entity_name,
+                event.entity_id ?? null,
+                event.action,
+                null,
+                { description: event.description, occurred_at: event.occurred_at, device_id: deviceId }
+            );
+        }
+
+        res.status(200).json({
+            success: true,
+            message: `${events.length} change-log event(s) recorded`
+        });
+
+    } catch (err) {
+
+        console.error("Push change-log events error:", err);
+
+        res.status(400).json({
+            success: false,
+            message: "Failed to record change-log events"
         });
 
     }

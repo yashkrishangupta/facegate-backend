@@ -1,4 +1,5 @@
 import pool from "../config/database";
+import * as ConflictRepository from "./ConflictRepository";
 
 /**
  * Sync Repository — the core pull/push loop described in the architecture
@@ -136,11 +137,33 @@ const pullForRoom = async (roomId: string, since?: string) => {
         attendanceParams
     );
 
+    // Conflicts-down — mirrors a website-side resolution (or a conflict an
+    // admin raised manually) back to every device in the room, not just
+    // the device that originally detected it. Previously this room's
+    // conflict rows never left the website at all: the Android client has
+    // always merged `data.conflicts` from this response (see
+    // AttendanceSyncWorker), but the backend never populated the field, so
+    // it silently stayed an empty list on every device forever.
+    const conflictSinceClause = since ? "AND c.updated_at > $2" : "";
+    const conflictParams = since ? [roomId, since] : [roomId];
+
+    const conflicts = await pool.query(
+        `SELECT c.conflict_id, c.attendance_id, c.attendance_session_id,
+                c.student_id, c.device_id, c.conflict_type, c.severity,
+                c.conflict_status, c.description, c.updated_at
+         FROM conflict c
+         JOIN attendance_session ases ON ases.attendance_session_id = c.attendance_session_id
+         JOIN timetable t ON t.timetable_id = ases.timetable_id
+         WHERE t.room_id = $1 AND c.is_active = TRUE ${conflictSinceClause}`,
+        conflictParams
+    );
+
     return {
         timetable: timetable.rows,
         students: students.rows,
         holidays: holidays.rows,
         embeddings: embeddings.rows,
+        conflicts: conflicts.rows,
         attendanceUpdates: attendanceDown.rows
     };
 };
@@ -154,7 +177,7 @@ export const fullSync = async (deviceId: string, roomId: string) => {
 
         await logSync(deviceId, "FULL", startedAt, {
             downloaded: data.timetable.length + data.students.length + data.holidays.length
-                + data.embeddings.length + data.attendanceUpdates.length,
+                + data.embeddings.length + data.conflicts.length + data.attendanceUpdates.length,
             uploaded: 0,
             failed: 0
         });
@@ -176,7 +199,7 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
 
         await logSync(deviceId, "INCREMENTAL", startedAt, {
             downloaded: data.timetable.length + data.students.length + data.holidays.length
-                + data.embeddings.length + data.attendanceUpdates.length,
+                + data.embeddings.length + data.conflicts.length + data.attendanceUpdates.length,
             uploaded: 0,
             failed: 0
         });
@@ -186,11 +209,13 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
             updatedStudents: data.students.length,
             updatedHolidays: data.holidays.length,
             updatedEmbeddings: data.embeddings.length,
+            updatedConflicts: data.conflicts.length,
             updatedAttendance: data.attendanceUpdates.length,
             timetable: data.timetable,
             students: data.students,
             holidays: data.holidays,
             embeddings: data.embeddings,
+            conflicts: data.conflicts,
             attendanceUpdates: data.attendanceUpdates,
             lastSync: new Date().toISOString()
         };
@@ -215,6 +240,40 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
  * use — the one real session row for that period and attaches attendance
  * to that canonical ID.
  */
+/**
+ * Resolves — creating on first use — the one real attendance_session row
+ * for a (timetable_id, session_date) pair. Shared by both attendance
+ * upload and conflict upload, since a conflict is always anchored to a
+ * specific class period the same way an attendance record is, and a
+ * device-generated local id can't be trusted as the canonical session id
+ * (see uploadAttendance's doc comment for the full reasoning).
+ */
+const resolveSessionId = async (timetableId: string, sessionDate: string): Promise<string> => {
+    const inserted = await pool.query(
+        `INSERT INTO attendance_session
+            (attendance_session_id, timetable_id, session_date, start_time, end_time, session_status)
+         SELECT gen_random_uuid(), t.timetable_id, $2, t.start_time, t.end_time, 'ACTIVE'
+         FROM timetable t
+         WHERE t.timetable_id = $1
+         ON CONFLICT ON CONSTRAINT uq_session_per_day DO NOTHING
+         RETURNING attendance_session_id`,
+        [timetableId, sessionDate]
+    );
+
+    const sessionId = inserted.rows[0]?.attendance_session_id
+        ?? (await pool.query(
+            `SELECT attendance_session_id FROM attendance_session
+             WHERE timetable_id = $1 AND session_date = $2`,
+            [timetableId, sessionDate]
+        )).rows[0]?.attendance_session_id;
+
+    if (!sessionId) {
+        throw new Error(`No timetable row found for timetable_id ${timetableId}`);
+    }
+
+    return sessionId;
+};
+
 export const uploadAttendance = async (deviceId: string, attendanceData: any) => {
 
     const startedAt = new Date();
@@ -229,40 +288,18 @@ export const uploadAttendance = async (deviceId: string, attendanceData: any) =>
     // period don't repeat the lookup/insert round trip.
     const sessionCache = new Map<string, string>();
 
-    const resolveSessionId = async (timetableId: string, sessionDate: string): Promise<string> => {
+    const resolveCached = async (timetableId: string, sessionDate: string): Promise<string> => {
         const cacheKey = `${timetableId}:${sessionDate}`;
         const cached = sessionCache.get(cacheKey);
         if (cached) return cached;
-
-        const inserted = await pool.query(
-            `INSERT INTO attendance_session
-                (attendance_session_id, timetable_id, session_date, start_time, end_time, session_status)
-             SELECT gen_random_uuid(), t.timetable_id, $2, t.start_time, t.end_time, 'ACTIVE'
-             FROM timetable t
-             WHERE t.timetable_id = $1
-             ON CONFLICT ON CONSTRAINT uq_session_per_day DO NOTHING
-             RETURNING attendance_session_id`,
-            [timetableId, sessionDate]
-        );
-
-        const sessionId = inserted.rows[0]?.attendance_session_id
-            ?? (await pool.query(
-                `SELECT attendance_session_id FROM attendance_session
-                 WHERE timetable_id = $1 AND session_date = $2`,
-                [timetableId, sessionDate]
-            )).rows[0]?.attendance_session_id;
-
-        if (!sessionId) {
-            throw new Error(`No timetable row found for timetable_id ${timetableId}`);
-        }
-
+        const sessionId = await resolveSessionId(timetableId, sessionDate);
         sessionCache.set(cacheKey, sessionId);
         return sessionId;
     };
 
     for (const record of records) {
         try {
-            const sessionId = await resolveSessionId(record.timetable_id, record.session_date);
+            const sessionId = await resolveCached(record.timetable_id, record.session_date);
 
             await pool.query(
                 `INSERT INTO attendance
@@ -378,4 +415,253 @@ export const uploadEmbedding = async (deviceId: string, embeddingData: any) => {
         await logSync(deviceId, "FACE_SYNC", startedAt, { downloaded: 0, uploaded: 0, failed: 1, error: err.message });
         throw err;
     }
+};
+
+/**
+ * Device-initiated student enrollment (StudentsFragment/EnrollmentViewModel
+ * on Android) — creates the student row AND its face embedding in one
+ * atomic call, mirroring FacultyRepository.createFacultyWithAccount's
+ * transaction pattern. student_id is generated client-side (UUID) so the
+ * local Room row and the server row share the same id from the start; the
+ * insert is upserted on that id (rather than erroring) so a retried
+ * request after a dropped connection doesn't fail or duplicate.
+ *
+ * batch_code (not batch_id) is what the device actually has on hand, since
+ * batch_id is an internal server id the device never needs to know for
+ * anything else — resolved to batch_id here.
+ */
+export const enrollStudent = async (deviceId: string, enrollData: any) => {
+
+    const {
+        student_id, batch_code, registration_number, roll_number,
+        first_name, last_name, gender, admission_year, date_of_birth,
+        email, phone, embedding_data, embedding_version, model_name
+    } = enrollData;
+
+    if (!student_id || !batch_code || !registration_number || !roll_number
+        || !first_name || !last_name || !gender || !admission_year
+        || !embedding_data || !model_name) {
+        throw new Error(
+            "student_id, batch_code, registration_number, roll_number, first_name, "
+            + "last_name, gender, admission_year, embedding_data, and model_name are required"
+        );
+    }
+
+    const startedAt = new Date();
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        const batchResult = await client.query(
+            `SELECT batch_id FROM batch WHERE batch_code = $1 AND is_active = TRUE`,
+            [batch_code]
+        );
+        const batchId = batchResult.rows[0]?.batch_id;
+        if (!batchId) {
+            throw new Error(`No active batch found for batch_code ${batch_code}`);
+        }
+
+        const studentResult = await client.query(
+            `INSERT INTO student
+                (student_id, batch_id, registration_number, roll_number, first_name,
+                 last_name, email, phone, gender, date_of_birth, admission_year)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+             ON CONFLICT (student_id) DO UPDATE SET
+                batch_id = EXCLUDED.batch_id,
+                registration_number = EXCLUDED.registration_number,
+                roll_number = EXCLUDED.roll_number,
+                first_name = EXCLUDED.first_name,
+                last_name = EXCLUDED.last_name,
+                email = EXCLUDED.email,
+                phone = EXCLUDED.phone,
+                gender = EXCLUDED.gender,
+                date_of_birth = EXCLUDED.date_of_birth,
+                admission_year = EXCLUDED.admission_year,
+                updated_at = CURRENT_TIMESTAMP
+             RETURNING student_id`,
+            [
+                student_id, batchId, registration_number, roll_number, first_name,
+                last_name, email ?? null, phone ?? null, gender, date_of_birth ?? null,
+                admission_year
+            ]
+        );
+
+        const embeddingResult = await client.query(
+            `INSERT INTO face_embedding
+                (student_id, embedding_data, embedding_version, model_name, confidence_threshold)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT ON CONSTRAINT uq_student_embedding
+             DO UPDATE SET
+                embedding_data = EXCLUDED.embedding_data,
+                embedding_version = EXCLUDED.embedding_version,
+                model_name = EXCLUDED.model_name,
+                embedding_status = 'ACTIVE',
+                last_updated = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP
+             RETURNING embedding_id`,
+            [student_id, JSON.stringify(embedding_data), embedding_version || "v1.0", model_name, 75.00]
+        );
+
+        await client.query("COMMIT");
+
+        await logSync(deviceId, "STUDENT_ENROLLMENT", startedAt, { downloaded: 0, uploaded: 1, failed: 0 });
+
+        return {
+            student_id: studentResult.rows[0].student_id,
+            embedding_id: embeddingResult.rows[0].embedding_id
+        };
+
+    } catch (err: any) {
+        await client.query("ROLLBACK");
+        await logSync(deviceId, "STUDENT_ENROLLMENT", startedAt, { downloaded: 0, uploaded: 0, failed: 1, error: err.message });
+        throw err;
+    } finally {
+        client.release();
+    }
+};
+
+/**
+ * Device push — conflicts the decision engine detected locally (low
+ * confidence match, duplicate attendance, unknown face, etc.), batched
+ * like attendance upload. Each record resolves its own attendance_session
+ * the same way an attendance record does (timetable_id + session_date —
+ * conflict.attendance_session_id is NOT NULL, so a record with neither
+ * can't be created; it's counted as failed rather than aborting the whole
+ * batch). client_refs lets the device correlate created rows back to its
+ * local ids.
+ */
+export const uploadConflicts = async (deviceId: string, conflictData: any) => {
+
+    const startedAt = new Date();
+    const records: any[] = Array.isArray(conflictData) ? conflictData : conflictData?.records ?? [];
+    const clientRefs: any[] = conflictData?.client_refs ?? [];
+
+    const created: { client_ref: number; conflict_id: string }[] = [];
+    let uploaded = 0;
+    let failed = 0;
+
+    const sessionCache = new Map<string, string>();
+    const resolveCached = async (timetableId: string, sessionDate: string): Promise<string> => {
+        const cacheKey = `${timetableId}:${sessionDate}`;
+        const cached = sessionCache.get(cacheKey);
+        if (cached) return cached;
+        const sessionId = await resolveSessionId(timetableId, sessionDate);
+        sessionCache.set(cacheKey, sessionId);
+        return sessionId;
+    };
+
+    for (let i = 0; i < records.length; i++) {
+        const record = records[i];
+        const clientRef = clientRefs[i] ?? i;
+        try {
+            if (!record.timetable_id || !record.session_date) {
+                throw new Error("timetable_id and session_date are required to anchor a conflict to a session");
+            }
+            const sessionId = await resolveCached(record.timetable_id, record.session_date);
+
+            const result = await pool.query(
+                `INSERT INTO conflict
+                    (attendance_session_id, student_id, device_id, conflict_type, severity, description)
+                 VALUES ($1, $2, $3, $4, $5, $6)
+                 RETURNING conflict_id`,
+                [
+                    sessionId,
+                    record.student_id ?? null,
+                    deviceId,
+                    record.conflict_type,
+                    record.severity ?? "MEDIUM",
+                    record.description ?? null
+                ]
+            );
+
+            created.push({ client_ref: clientRef, conflict_id: result.rows[0].conflict_id });
+            uploaded++;
+        } catch (err) {
+            console.error("Conflict upload row failed:", err);
+            failed++;
+        }
+    }
+
+    await logSync(deviceId, "CONFLICT_UPLOAD", startedAt, { downloaded: 0, uploaded, failed });
+
+    return { created };
+};
+
+/**
+ * Device resolving a conflict it's showing to whoever's standing at the
+ * tablet — mirrors the website's PUT /conflicts/:id/resolve and
+ * /conflicts/:id/status, but device-authed and restricted to RESOLVED /
+ * REJECTED (a device doesn't have a UNDER_REVIEW workflow, and resolved_by
+ * is an admin_user FK — a device has no admin_id, so it's always left
+ * null; the device's own identity is recorded in resolution_notes
+ * instead).
+ */
+export const resolveConflictAsDevice = async (deviceId: string, conflictId: string, status: string) => {
+    const valid = ["RESOLVED", "REJECTED"];
+    if (!valid.includes(status)) {
+        throw new Error(`conflict_status must be one of: ${valid.join(", ")}`);
+    }
+
+    const startedAt = new Date();
+    try {
+        const conflict = await ConflictRepository.updateConflictStatus(
+            conflictId, status, null, `Resolved from device ${deviceId}`
+        );
+        if (!conflict) throw new Error("Conflict not found");
+
+        await logSync(deviceId, "CONFLICT_RESOLVE", startedAt, { downloaded: 0, uploaded: 1, failed: 0 });
+        return conflict;
+    } catch (err: any) {
+        await logSync(deviceId, "CONFLICT_RESOLVE", startedAt, { downloaded: 0, uploaded: 0, failed: 1, error: err.message });
+        throw err;
+    }
+};
+
+/**
+ * Read-only, room-scoped report summaries (ReportsSyncResponse on
+ * Android) — one row per session taught in this device's room, computed
+ * live from attendance the same way ReportRepository does for the website,
+ * rather than trusting attendance_session's total_students/present_students/
+ * absent_students columns (nothing in this codebase keeps those updated).
+ * `since` is optional; defaults to a 7-day lookback so a fresh device
+ * doesn't pull the room's entire report history.
+ */
+export const getReports = async (deviceId: string, roomId: string, since?: string) => {
+    const sinceClause = since ? "AND ases.updated_at > $2" : "AND ases.updated_at > $2";
+    const params = since
+        ? [roomId, since]
+        : [roomId, new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()];
+
+    const startedAt = new Date();
+    const result = await pool.query(
+        `SELECT
+            t.timetable_id,
+            ases.session_date,
+            sub.subject_name,
+            b.batch_code,
+            COUNT(DISTINCT s.student_id) AS total_students,
+            COUNT(DISTINCT a.student_id) FILTER (WHERE a.attendance_status = 'PRESENT' AND a.is_active = TRUE) AS present_students,
+            COUNT(DISTINCT s.student_id) - COUNT(DISTINCT a.student_id) FILTER (WHERE a.attendance_status = 'PRESENT' AND a.is_active = TRUE) AS absent_students,
+            ases.updated_at
+         FROM attendance_session ases
+         JOIN timetable t ON t.timetable_id = ases.timetable_id
+         JOIN subject sub ON sub.subject_id = t.subject_id
+         JOIN batch b ON b.batch_id = t.batch_id
+         JOIN student s ON s.batch_id = b.batch_id AND s.is_active = TRUE
+         LEFT JOIN attendance a ON a.attendance_session_id = ases.attendance_session_id
+         WHERE t.room_id = $1 AND ases.is_active = TRUE ${sinceClause}
+         GROUP BY t.timetable_id, ases.session_date, sub.subject_name, b.batch_code, ases.updated_at
+         ORDER BY ases.session_date DESC`,
+        params
+    );
+
+    await logSync(deviceId, "REPORTS_PULL", startedAt, { downloaded: result.rows.length, uploaded: 0, failed: 0 });
+
+    return result.rows.map(row => ({
+        ...row,
+        total_students: Number(row.total_students),
+        present_students: Number(row.present_students),
+        absent_students: Number(row.absent_students)
+    }));
 };

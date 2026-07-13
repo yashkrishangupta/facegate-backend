@@ -5,12 +5,14 @@ import { requireAuth, requireAdmin } from "../middleware/auth";
 import {
     getAllDevices,
     getDeviceById,
+    getOwnDevice,
     getDeviceHealth,
     getDeviceSyncHistory,
     createPendingDevice,
     pairDevice,
     updateDevice,
     heartbeat,
+    pushChangeLogEvents,
     getDeviceStatus,
     deactivateDevice
 } from "../controllers/DeviceController";
@@ -35,6 +37,16 @@ router.post("/pair", pairDevice);
 
 // Device Heartbeat — device-token protected
 router.post("/heartbeat", deviceAuth, heartbeat);
+
+// Push Change-Log Events — device-token protected, device-scoped equivalent
+// of the website's read-only /change-log. Not on the backend before this —
+// Android's DeviceApi.pushChangeLogEvents had nowhere to send to.
+router.post("/change-log", deviceAuth, pushChangeLogEvents);
+
+// Self-check — device-token protected. See getOwnDevice's doc comment:
+// this is what GET /devices/{deviceId} was always documented as, but
+// never actually was.
+router.get("/me", deviceAuth, getOwnDevice);
 
 router.use(requireAuth);
 

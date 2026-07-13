@@ -1,37 +1,52 @@
 # FaceGate API Reference
 
-Base URL: `{API_URL}/api/v1`. Written to make the Android fix straightforward — Part 1 is
-everything the app actually calls, in full detail. Part 2 is the rest of the API (website
-traffic only) as a summary table, since Android never calls it.
+Base URL: `{API_URL}/api/v1`
 
 Companion doc: `database.md`, for the tables these endpoints read/write.
 
 ---
 
-## Auth model — two separate systems, don't mix them up
+## 1. Auth model
 
-| | Website (browser) | Android app |
+Two independent credential systems — a request never carries both.
+
+| | Website (admin/faculty) | Android device |
 |---|---|---|
-| Credential | JWT, `Authorization: Bearer <token>` | Device token, `x-api-key: <device_token>` |
-| Obtained via | `POST /admin/login` (username + password) | `POST /devices/pair` (pairing code) |
-| Who | Admin/Faculty/Viewer human | The paired device itself |
-| Expiry | 12h (configurable, `JWT_EXPIRES_IN`) | Never — until an admin deactivates the device |
+| Header | `Authorization: Bearer <jwt>` | `x-api-key: <device_token>` |
+| Obtained via | `POST /admin/login` | `POST /devices/pair` |
+| Expiry | 12h (`JWT_EXPIRES_IN`) | Never, until deactivated |
+| Roles | `SUPER_ADMIN`, `ADMIN`, `FACULTY`, `VIEWER` | N/A — a device is a device |
 
-The Android app should **never** see or handle a JWT. It only ever needs `x-api-key`.
+**Access legend used throughout this document:**
+- `Public` — no header needed.
+- `Auth` — any authenticated role (`requireAuth`).
+- `Admin+` — `SUPER_ADMIN` or `ADMIN` only (`requireAdmin`).
+- `Super Admin` — `SUPER_ADMIN` only (`requireSuperAdmin`).
+- `Device` — `x-api-key` (`deviceAuth`).
+
+**Faculty row-scoping — current coverage.** A `FACULTY`-role caller is now actually filtered
+to their own data in three places: `GET /attendance/session/:sessionId` and
+`GET /attendance/student/:studentId` (only rows tied to sessions they teach),
+`GET /conflicts` (same), and `GET /reports/faculty/:facultyId` (blocked outright from
+querying another faculty member's ID). The daily/summary/department report aggregates
+remain visible to every role — a deliberate choice, not an oversight, since those don't
+expose another specific faculty member's individual student data.
 
 ---
 
-# Part 1 — Endpoints Android calls
+## 2. Device pairing (detail — the table below only summarizes this)
 
-## 1. Pair Device (first launch)
-
-```
-POST /devices/pair
-```
-No auth header. This is the call that *obtains* the device's credential.
-
-**Request**
+**Step 1 — Create Device (admin, website):**
 ```json
+POST /devices  { "room_id": "uuid", "device_name": "Front Door Tablet" }
+```
+→ `201` `{ data: { deviceId, roomId, deviceName, pairingCode, pairingCodeExpiresAt } }`
+No `device_token` yet. Code expires in 15 minutes, single-use. One
+`ACTIVE`/`PENDING_PAIRING` device per room, enforced at the DB level and pre-checked.
+
+**Step 2 — Pair Device (physical device, first app launch):**
+```json
+POST /devices/pair
 {
   "pairing_code": "482913",
   "device_identifier": "Samsung-SM-T510-a1b2c3d4",
@@ -39,336 +54,376 @@ No auth header. This is the call that *obtains* the device's credential.
   "operating_system": "Android 14"
 }
 ```
-`pairing_code` is the 6-digit code an admin generated on the website (`POST /devices`,
-website-only, see Part 2). Valid 15 minutes, single-use.
-
-**Success — 200**
-```json
-{
-  "success": true,
-  "message": "Device paired successfully",
-  "data": {
-    "deviceId": "3fa2...",
-    "deviceToken": "9e7c...",
-    "roomId": "6f31bca2-fc92-4d84-bcc8-5c0d8d7a22c1"
-  }
-}
-```
-Save `deviceToken` as the permanent `x-api-key` and `deviceId`/`roomId` locally — this is the
-only response that ever contains the token.
-
-**Errors — 400**: code missing, unknown, expired, or already redeemed.
+→ `200` `{ data: { deviceId, deviceToken, roomId } }` — the only response that ever returns
+`device_token`.
 
 ---
 
-## 2. Heartbeat
+## 3. Sync (detail)
 
-```
-POST /devices/heartbeat
-Header: x-api-key: <device_token>
-```
-Call periodically (every few minutes) so the website's device list shows accurate
-online/battery/storage status.
-
-**Request**
+Full/incremental sync response shape:
 ```json
 {
-  "battery_level": 78,
-  "storage_available_mb": 18234,
-  "network_status": "ONLINE"
+  "timetable": [...], "students": [...], "holidays": [...],
+  "embeddings": [...], "attendanceUpdates": [...],
+  "lastSync": "..."
 }
 ```
-No `deviceId` in the body — the server identifies the caller from `x-api-key`, never trusts a
-body-supplied ID (that would let one device spoof another's heartbeat).
+- **Timetable** filtered by `room_id`.
+- **Students** filtered by room + batch composite (batches actually taught in this room).
+  Includes `enrollment_status`, never the embedding itself.
+- **Holidays** global — every device gets every active holiday.
+- **Embeddings** *(new)* — active face embeddings for students in this room's batches:
+  `{ student_id, embedding_data, embedding_version, model_name, confidence_threshold,
+  updated_at }`. `embedding_data` is the raw feature vector as JSON, opaque to the sync
+  protocol itself.
+- **attendanceUpdates** *(new)* — server-authored attendance changes (typically a website
+  manual correction) for this room's sessions: `{ attendance_id, timetable_id, session_date,
+  student_id, status, attendance_mode, attendance_time, updated_at }`. Full sync caps the
+  lookback at 30 days; incremental uses the same `since` filter as everything else.
+  **Merge rule**: compare `updated_at` against the local row for the same
+  `(timetable_id, session_date, student_id)` — most-recent-wins, regardless of source.
+  This is a network-contract-only fix — the Android-side merge logic against the local Room
+  database still needs writing.
 
-**Success — 200**
+**Upload attendance** — unchanged: `{ records: [{ timetable_id, session_date, student_id,
+status, attendance_mode, confidence, timestamp }] }`, idempotent, upserts on
+`(attendance_session_id, student_id)`.
+
+**Upload embedding** *(new)*:
 ```json
-{ "success": true, "message": "Heartbeat received", "data": {} }
+POST /sync/embeddings
+{ "student_id": "uuid", "embedding_data": {...}, "embedding_version": "v1.0",
+  "model_name": "facenet-v2", "confidence_threshold": 75.0 }
 ```
+Upserts on `student_id` server-side — re-enrolling a student replaces the old vector rather
+than erroring or duplicating.
+
+**Enroll student** *(new)* — device-initiated new student + embedding, one atomic call:
+```json
+POST /sync/students/enroll
+{ "student_id": "uuid", "batch_code": "CS-2024-A", "registration_number": "...",
+  "roll_number": "...", "first_name": "...", "last_name": "...", "gender": "Male",
+  "admission_year": 2024, "date_of_birth": "2005-01-01", "email": "...", "phone": "...",
+  "embedding_data": [...], "embedding_version": "v1.0", "model_name": "facenet-v2" }
+```
+→ `201` `{ data: { student_id, embedding_id } }`. `student_id` is client-generated so the
+local and server rows share an id from the start; upserts on `student_id` (both the student
+row and the embedding row), so a retried request is safe. `batch_code` is resolved to
+`batch_id` server-side — 400 if no active batch matches.
+
+**Push conflicts** *(new)* — batched, mirrors attendance upload's session resolution:
+```json
+POST /sync/conflicts
+{ "records": [{ "timetable_id": "uuid", "session_date": "2026-07-13",
+  "student_id": "uuid|null", "conflict_type": "LOW_CONFIDENCE", "severity": "MEDIUM",
+  "description": "..." }], "client_refs": [0] }
+```
+→ `{ data: { created: [{ client_ref, conflict_id }] } }`. Each record resolves/creates its
+`attendance_session` the same way attendance upload does; a record with no resolvable
+`timetable_id`/`session_date` fails that row only (`conflict.attendance_session_id` is
+`NOT NULL`, so it can't be created with neither).
+
+**Resolve conflict** *(new)* — device-authed equivalent of the website's `/conflicts/:id/resolve`:
+```json
+PUT /sync/conflicts/:conflictId/resolve
+{ "conflict_status": "RESOLVED" }
+```
+`RESOLVED` or `REJECTED` only. `resolved_by` stays `NULL` (a device has no `admin_id`); the
+device's identity is recorded in `resolution_notes` instead.
+
+**Reports** *(new)* — read-only, room-scoped session summaries:
+```
+GET /sync/reports?since=<ISO timestamp>
+```
+→ `{ data: [{ timetable_id, session_date, subject_name, batch_code, total_students,
+present_students, absent_students, updated_at }] }`. `since` optional, defaults to a 7-day
+lookback.
+
+**Conflicts down** *(new)* — both full and incremental sync responses now also include a
+`conflicts[]` array (same shape as the `SyncConflictDto` the Android app already expected),
+scoped to this device's room, so a website-side resolution (or an admin-raised conflict)
+reaches the device too, not just conflicts the device itself detected.
 
 ---
 
-## 3. Full Sync
+## 4. Manual attendance (detail)
 
-```
-POST /sync/full
-Header: x-api-key: <device_token>
-```
-Call once right after pairing, and any time a from-scratch resync is needed (e.g. local DB
-was cleared). Pulls **everything** relevant to this device's room — no `since` filter.
-
-**Success — 200**
 ```json
-{
-  "success": true,
-  "data": {
-    "timetable": [ /* see shape below */ ],
-    "students": [ /* see shape below */ ],
-    "holidays": [ /* see shape below */ ],
-    "lastSync": "2026-07-11T10:45:00Z"
-  }
-}
+POST /attendance/manual
+{ "timetable_id": "uuid", "session_date": "2026-07-13",
+  "records": [{ "student_id": "uuid", "status": "PRESENT" }] }
 ```
-
-### `timetable[]` row shape
-```json
-{
-  "timetable_id": "uuid",
-  "batch_id": "uuid", "batch_code": "CS-2024-A",
-  "faculty_id": "uuid", "faculty_name": "Amit Sharma",
-  "subject_id": "uuid", "subject_code": "CS301", "subject_name": "Operating Systems",
-  "room_id": "uuid",
-  "day_of_week": "Monday",
-  "lecture_number": 3,
-  "start_time": "10:00:00", "end_time": "11:00:00",
-  "attendance_window_minutes": 15,
-  "effective_from": "2026-01-01", "effective_to": null,
-  "updated_at": "2026-07-10T09:00:00Z"
-}
-```
-Filter is `room_id = <this device's room>` — never filtered by batch directly.
-
-### `students[]` row shape
-```json
-{
-  "student_id": "uuid", "batch_id": "uuid", "batch_code": "CS-2024-A",
-  "registration_number": "2024CS001", "roll_number": "01",
-  "first_name": "Riya", "last_name": "Verma",
-  "email": "riya@example.edu", "phone": "9876543210",
-  "gender": "Female", "student_status": "ACTIVE",
-  "updated_at": "2026-07-09T12:00:00Z"
-}
-```
-Filter is **room + batch composite**: `batch_id IN (SELECT batch_id FROM timetable WHERE
-room_id = <this room>)` — i.e. only students in a batch that's actually taught in this room.
-No face embedding is included here — embeddings are a separate concern, not currently wired
-into this payload (see "Known gaps" at the bottom).
-
-### `holidays[]` row shape
-```json
-{
-  "holiday_id": "uuid", "holiday_date": "2026-08-15",
-  "holiday_name": "Independence Day", "holiday_type": "NATIONAL",
-  "is_recurring": true, "updated_at": "2026-06-01T00:00:00Z"
-}
-```
-**Not room-filtered** — every device gets every active holiday.
+Resolves/creates the `attendance_session` from `(timetable_id, session_date)` the same way
+the device sync path does — deliberately, since the website has no separate way to create a
+session, so requiring a pre-existing `session_id` would make this uncallable for any period
+nobody has synced yet.
 
 ---
 
-## 4. Incremental Sync
+## 5. Conflict status transitions (detail)
 
-```
-GET /sync/incremental?since=2026-07-10T09:00:00Z
-Header: x-api-key: <device_token>
-```
-Same three collections as Full Sync, but each filtered to `updated_at > since`. Call this on
-a periodic background job (WorkManager) instead of Full Sync once the device has synced at
-least once. Store the `lastSync` timestamp from the previous response and pass it as `since`.
-
-**Success — 200**
-```json
-{
-  "success": true,
-  "data": {
-    "updatedTimetable": 2,
-    "updatedStudents": 5,
-    "updatedHolidays": 0,
-    "timetable": [ /* same shape as Full Sync, only changed rows */ ],
-    "students": [ /* same shape as Full Sync, only changed rows */ ],
-    "holidays": [ /* same shape as Full Sync, only changed rows */ ],
-    "lastSync": "2026-07-11T10:45:00Z"
-  }
-}
-```
-This endpoint doesn't tell you about **deletions** (a student/timetable row going inactive) —
-it only returns rows whose `updated_at` moved forward, and a soft-delete does bump
-`updated_at`, but the row still comes back with whatever active/inactive flag it now has
-(check `is_active`/`student_status` client-side, don't assume "returned" means "still valid").
+- `PUT /:conflictId/resolve` — sets `RESOLVED` specifically, requires resolution notes.
+- `PUT /:conflictId/status` `{ status: "UNDER_REVIEW" | "REJECTED", notes? }` — direct
+  transition, previously unreachable through the UI (only `PENDING`/`RESOLVED` were ever set
+  anywhere).
+- `DELETE /:conflictId` — soft-delete (`is_active = false`), still distinct from
+  `status = 'REJECTED'`.
 
 ---
 
-## 5. Upload Attendance (batch, offline-safe — the primary path)
+## 6. Complete endpoint reference
 
-```
-POST /sync/attendance
-Header: x-api-key: <device_token>
-```
-This is the endpoint the sync worker should push through, whether it's one record or a
-backlog from being offline. **Idempotent** — safe to retry the whole batch if the network
-drops mid-request.
-
-**Request**
-```json
-{
-  "records": [
-    {
-      "timetable_id": "uuid",
-      "session_date": "2026-07-11",
-      "student_id": "uuid",
-      "status": "PRESENT",
-      "attendance_mode": "FACE_RECOGNITION",
-      "confidence": 0.94,
-      "timestamp": "2026-07-11T10:05:23Z"
-    }
-  ]
-}
-```
-Note it's `timetable_id` + `session_date`, **not** a session UUID — the device never invents
-a session ID. The server resolves (creating on first use) the one real
-`attendance_session` row for that period via the `uq_session_per_day` constraint, so two
-devices or a restarted app can't create duplicate sessions for the same class.
-
-`status` defaults to `PRESENT` if omitted; `attendance_mode` defaults to
-`FACE_RECOGNITION`; `timestamp` defaults to server-received-time if omitted.
-
-**Success — 200**
-```json
-{
-  "success": true,
-  "data": {
-    "uploadedRecords": 4,
-    "failedRecords": 0,
-    "status": "SUCCESS"
-  }
-}
-```
-`status` is `"PARTIAL"` if some records failed — check `failedRecords` and retry the batch
-(the successful ones will just no-op via the upsert). Mark local rows `synced = true` only
-for the ones the server actually accepted, not the whole batch, if you want to be precise —
-though in practice a full-batch retry is harmless since the upsert is on
-`(session, student)`, not append-only.
-
----
-
-## 6. Mark Attendance (single record — secondary path)
-
-```
-POST /attendance/mark
-Header: x-api-key: <device_token>
-```
-**Different contract from #5** — this expects an actual `session_id` UUID that must already
-exist (it does *not* resolve one from `timetable_id`+`session_date`). Only useful if the app
-already has a session ID cached locally (e.g. from a prior sync or a "session started" event)
-— for most real-time face-recognition marks, prefer #5, which is more forgiving.
-
-**Request**
-```json
-{
-  "session_id": "uuid",
-  "student_id": "uuid",
-  "device_id": "uuid",
-  "status": "PRESENT",
-  "attendance_mode": "FACE_RECOGNITION",
-  "confidence": 0.94,
-  "remarks": null
-}
-```
-
-**Success — 201**
-```json
-{ "success": true, "message": "Attendance marked successfully", "data": { /* attendance row */ } }
-```
-
----
-
-## 7. Sync Status
-
-```
-GET /sync/status
-Header: x-api-key: <device_token>
-```
-**Success — 200**
-```json
-{
-  "success": true,
-  "data": {
-    "deviceStatus": "ACTIVE",
-    "networkStatus": "ONLINE",
-    "syncStatus": "SUCCESS",
-    "lastSync": "2026-07-11T10:45:00Z",
-    "lastError": null
-  }
-}
-```
-
-## 8. Retry Sync
-
-```
-POST /sync/retry
-Header: x-api-key: <device_token>
-```
-Just re-runs an incremental sync server-side and logs it — a convenience wrapper, not
-materially different from calling #4 yourself. `data` shape matches #4's response.
-
-## 9. Get This Device's Own Details
-
-```
-GET /devices/{deviceId}
-```
-No auth required on the backend (never returns `device_token`, so nothing to protect).
-Useful to pick up a room reassignment — if an admin moves this device to a different room,
-the device won't know until it calls this (or gets a `room_id` mismatch some other way) and
-re-syncs against the new room.
-
-**Success — 200**
-```json
-{
-  "success": true,
-  "data": {
-    "device_id": "uuid", "room_id": "uuid", "device_name": "Front Door Tablet",
-    "device_status": "ACTIVE", "battery_percentage": 82,
-    "last_heartbeat": "2026-07-11T10:50:00Z", "last_sync": "2026-07-11T10:45:00Z"
-  }
-}
-```
-
----
-
-## Known gaps (things Android might currently assume that aren't real)
-
-- **No face-embedding sync exists yet.** The architecture doc envisioned embeddings
-  syncing between devices; the current `students[]` payload doesn't include one. If the app
-  is trying to read an embedding field off the student sync response, that's the bug —
-  there isn't one there.
-- **No attendance-down sync.** A manual correction made on the website (Reports page) does
-  not currently flow back to any device. If the app expects to reconcile server-side edits
-  during incremental sync, it won't see them — this is planned but not built.
-- **Deletions aren't explicit.** As noted under Incremental Sync, watch `is_active` /
-  `student_status` on returned rows rather than expecting a separate "removed" list.
-
----
-
-# Part 2 — Website-only endpoints (reference table)
-
-Android never calls any of these. Included for completeness / in case the app UI ever needs
-to link out to the website. All require `Authorization: Bearer <jwt>` unless noted.
-
-| Method | Path | Auth | Purpose |
+## Admin & Auth — /admin
+| Method | Path | Access | Notes |
 |---|---|---|---|
-| POST | `/admin/login` | none | Get a JWT (username + password) |
-| POST | `/admin/logout` | any role | No-op (stateless JWT) |
-| GET/PUT | `/admin/profile` | any role | View/edit own profile |
-| PUT | `/admin/change-password` | any role | Self-service, needs current password |
-| GET | `/admin` | ADMIN+ | List admins |
-| PUT | `/admin/:id/security` | SUPER_ADMIN | Role/status/password **reset** (no current password needed) |
-| DELETE | `/admin/:id` | SUPER_ADMIN | Deactivate an admin |
-| GET/POST/PUT/DELETE | `/faculty` | GET: any role · writes: ADMIN+ | Faculty CRUD; POST auto-creates a login |
-| GET/POST/PUT/DELETE | `/departments` | GET: any role · writes: ADMIN+ | |
-| GET/POST/PUT/DELETE | `/subjects` | GET: any role · writes: ADMIN+ | supports `?program=&semester=` |
-| GET/POST/PUT/DELETE | `/academic-calendar` | GET: any role · writes: ADMIN+ | supports `?academic_year=&semester=` |
-| GET | `/change-log` | ADMIN+ | supports `?entity_name=&action=&admin_id=&from_date=&to_date=` |
-| GET/POST/PUT/DELETE | `/rooms` | GET: any role · writes: ADMIN+ | |
-| GET/POST/PUT/DELETE | `/devices` | any role (GET) / ADMIN+ (write) | POST creates a **pending** device + pairing code, doesn't pair it |
-| GET/POST/PUT/DELETE | `/students` | GET: any role · writes: ADMIN+ | |
-| GET/POST/PUT/DELETE | `/timetable` | GET: any role · writes: ADMIN+ | also `/timetable/today`, `/timetable/batch/:id`, `/timetable/faculty/:id` |
-| GET/POST/PUT/DELETE | `/holidays` | GET: any role · writes: ADMIN+ | |
-| GET/POST/PUT/DELETE | `/conflicts` | GET/resolve: any role · create/delete: ADMIN+ | resolve = `PUT /conflicts/:id/resolve` |
-| GET/POST/PUT/DELETE | `/notifications` | GET: any role · writes: ADMIN+ | |
-| GET | `/dashboard/summary` \| `/attendance` \| `/conflicts` \| `/notifications` | any role | dashboard widgets |
-| GET | `/reports/summary` \| `/daily` \| `/student/:id` \| `/faculty/:id` \| `/department/:id` | any role | ⚠️ faculty row-scoping ("only my batches") not yet enforced — any authenticated role currently sees everything |
-| GET/PUT/DELETE | `/attendance` (session/student/:id) | any role (GET) · ADMIN+ (write) | manual corrections from the website |
+| POST | /login | Public | { username, password } → { token, admin } |
+| POST | /logout | Auth | Stateless JWT, no server-side effect |
+| GET | /profile | Auth | Own profile |
+| PUT | /profile | Auth | Name/phone/email only — not role/status/password |
+| PUT | /change-password | Auth | Self-service, requires currentPassword |
+| GET | / | Admin+ | List all admins |
+| POST | / | Super Admin | Create a plain ADMIN/SUPER_ADMIN/VIEWER account directly (not via Faculty) |
+| PUT | /:adminId/security | Super Admin | Reset password / role / status — no currentPassword needed |
+| DELETE | /:adminId | Super Admin | Soft-deactivate |
 
-⚠️ **Not implemented despite being referenced elsewhere**: `POST /attendance/manual`,
-`GET /devices/:id/health`, `GET /devices/:id/sync-history`, `GET /reports/export`. Don't
-build against these — they don't exist yet.
+## Faculty — /faculty
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth | Includes linked admin_id/username/account_status |
+| GET | /:facultyId | Auth |  |
+| POST | / | Admin+ | Also provisions a login account atomically |
+| PUT | /:facultyId | Admin+ | Syncs name/email/phone to linked admin_user |
+| DELETE | /:facultyId | Admin+ | Also disables the linked login |
+
+## Rooms — /rooms
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth |  |
+| GET | /:roomId | Auth |  |
+| POST | / | Admin+ | Required: room_number, building_name, room_type, capacity |
+| PUT | /:roomId | Admin+ |  |
+| DELETE | /:roomId | Admin+ |  |
+
+## Devices — /devices
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| POST | /pair | Public | Physical device redeems a pairing code — see Android section |
+| POST | /heartbeat | Device | { battery_level, storage_available_mb, network_status } |
+| GET | / | Auth |  |
+| GET | /status | Auth |  |
+| GET | /:deviceId | Auth | Never returns device_token |
+| GET | /:deviceId/health | Auth | Live battery/network/last-sync snapshot |
+| GET | /:deviceId/sync-history | Auth | Last 100 sync log entries |
+| POST | / | Admin+ | Creates a PENDING device + pairing code |
+| PUT | /:deviceId | Admin+ | Room reassignment goes through here |
+| DELETE | /:deviceId | Admin+ |  |
+| POST | /change-log | Device | *(new)* Device-scoped equivalent of the website's read-only GET /change-log — pushes `{ events: [{ entity_name, entity_id, action, description, occurred_at }] }` |
+| GET | /me | Device | *(new)* Device self-check — returns this device's own row (room_id etc.), never device_token. This is what GET /:deviceId was always documented as being usable for; that route is requireAuth-only and always 401s a device — see §9 |
+
+## Sync (device-only) — /sync
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| POST | /full | Device | Everything for this device's room, no since filter |
+| GET | /incremental | Device | ?since=<ISO timestamp> — only changed rows |
+| POST | /attendance | Device | Batch upload, idempotent — see Android section |
+| POST | /embeddings | Device | Upload a newly-captured face embedding — upserts on student_id |
+| POST | /students/enroll | Device | *(new)* Device-initiated new student + embedding, one atomic call — upserts on student_id |
+| POST | /conflicts | Device | *(new)* Push device-detected conflicts, batched — see §3 |
+| PUT | /conflicts/:conflictId/resolve | Device | *(new)* Resolve/reject a conflict from the device — RESOLVED or REJECTED only |
+| GET | /reports | Device | *(new)* Read-only, room-scoped session summaries — ?since=<ISO timestamp> |
+| GET | /status | Device |  |
+| POST | /retry | Device | Re-runs an incremental sync server-side |
+
+## Attendance — /attendance
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| POST | /mark | Device | Single record, requires an existing session_id |
+| POST | /manual | Auth | Bulk, whole session at once — resolves session from timetable_id+session_date, like the device path |
+| GET | /summary/:sessionId | Auth |  |
+| GET | /session/:sessionId | Auth |  |
+| GET | /student/:studentId | Auth |  |
+| PUT | /:attendanceId | Auth | Manual correction from the website |
+| DELETE | /:attendanceId | Auth |  |
+
+## Students — /students
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth | Filters: academic_year, program_id, semester, batch_id, department_id |
+| GET | /batch/:batchId | Auth |  |
+| GET | /:studentId | Auth | Includes enrollment_status (never the embedding itself) |
+| POST | / | Admin+ | Required: batch_id, registration_number, roll_number, first_name, last_name, gender, admission_year |
+| PUT | /:studentId | Admin+ |  |
+| DELETE | /:studentId | Admin+ |  |
+
+## Timetable — /timetable
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | /today | Auth |  |
+| GET | /batch/:batchId | Auth |  |
+| GET | /faculty/:facultyId | Auth |  |
+| GET | / | Auth | Filters: academic_year, program_id, semester, batch_id, room_id |
+| POST | / | Admin+ | effective_from defaults to today if omitted; rejects a room/faculty clash with a different batch |
+| PUT | /:timetableId | Admin+ |  |
+| DELETE | /:timetableId | Admin+ |  |
+
+## Batches — /batches
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth | Filters: academic_year, program_id, semester, department_id |
+| GET | /:batchId | Auth |  |
+| POST | / | Admin+ | Required: department_id, batch_code, program_id, academic_year, semester, section, strength |
+| PUT | /:batchId | Admin+ |  |
+| DELETE | /:batchId | Admin+ |  |
+
+## Programs — /programs
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth |  |
+| GET | /:programId | Auth |  |
+| POST | / | Admin+ | Required: program_code, program_name, degree_type, duration_years |
+| PUT | /:programId | Admin+ |  |
+| DELETE | /:programId | Admin+ |  |
+
+## Departments — /departments
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth |  |
+| GET | /:departmentId | Auth |  |
+| POST | / | Admin+ | Required: department_code, department_name |
+| PUT | /:departmentId | Admin+ |  |
+| DELETE | /:departmentId | Admin+ |  |
+
+## Subjects — /subjects
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth | Filters: program_id, semester, department_id |
+| GET | /:subjectId | Auth |  |
+| POST | / | Admin+ | Required: department_id, subject_code, subject_name, program_id, semester, credits, subject_type, contact_hours_per_week |
+| PUT | /:subjectId | Admin+ |  |
+| DELETE | /:subjectId | Admin+ |  |
+
+## Academic Calendar — /academic-calendar
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth | Filters: academic_year, semester |
+| GET | /:calendarId | Auth |  |
+| POST | / | Admin+ | Required: calendar_date, academic_year, semester |
+| PUT | /:calendarId | Admin+ |  |
+| DELETE | /:calendarId | Admin+ |  |
+
+## Holidays — /holidays
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth |  |
+| GET | /:holidayId | Auth |  |
+| POST | / | Admin+ | Auto-upserts the matching academic_calendar row |
+| PUT | /:holidayId | Admin+ |  |
+| DELETE | /:holidayId | Admin+ |  |
+
+## Conflicts — /conflicts
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth | Filters: status, severity, conflict_type, room_id, from_date, to_date |
+| GET | /:conflictId | Auth |  |
+| POST | / | Admin+ |  |
+| PUT | /:conflictId/resolve | Auth | Sets RESOLVED specifically, requires notes |
+| PUT | /:conflictId/status | Auth | Direct transition to UNDER_REVIEW or REJECTED |
+| DELETE | /:conflictId | Admin+ | Soft-delete |
+
+## Notifications — /notifications
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Auth |  |
+| GET | /:notificationId | Auth |  |
+| POST | / | Admin+ | Now has a dedicated frontend page (list + create) |
+| PUT | /:notificationId/read | Auth |  |
+| DELETE | /:notificationId | Admin+ |  |
+
+## Reports — /reports
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | /summary | Auth |  |
+| GET | /daily | Auth |  |
+| GET | /export | Auth | CSV export — ?reportType=student|batch|subject&id=&from=&to= |
+| GET | /student/:studentId | Auth |  |
+| GET | /faculty/:facultyId | Auth | FACULTY role blocked from querying another faculty member's ID |
+| GET | /department/:departmentId | Auth |  |
+
+## Dashboard — /dashboard
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | /summary | Auth |  |
+| GET | /attendance | Auth |  |
+| GET | /conflicts | Auth |  |
+| GET | /notifications | Auth |  |
+
+## Change Log — /change-log
+| Method | Path | Access | Notes |
+|---|---|---|---|
+| GET | / | Admin+ | Filters: entity_name, action, admin_id, from_date, to_date |
+---
+
+## 7. Timetable double-booking guard (detail)
+
+`POST /timetable` now rejects a create if a *different* batch already has an overlapping
+room or faculty booking at the same `day_of_week` and time range:
+`"Room is already booked for batch <code> at this day/time"` or the faculty equivalent.
+The pre-existing DB unique constraint still separately catches a clash for the *same* batch.
+**Caveat: only checked on create, not on update** — editing an existing period's time/room
+isn't re-validated against this.
+
+---
+
+## 8. Device diagnostics (detail)
+
+`GET /:deviceId/health` → `{ batteryLevel, networkStatus, storageAvailable, lastSeen,
+syncStatus, lastSyncType, lastError }` — reads the device's own row plus its most recent
+`device_sync_log` entry.
+
+`GET /:deviceId/sync-history` → last 100 `device_sync_log` rows, newest first — this table
+was already being written to on every sync/pair call; these endpoints just expose it.
+
+---
+
+## 9. Status of previously-known gaps
+
+| Gap | Status |
+|---|---|
+| No faculty row-scoping | **Resolved** for Attendance/Conflicts/faculty-report (see §1's caveat on aggregates) |
+| No attendance-down sync | **Resolved** (network contract) — Android merge logic still open |
+| No ADMIN/SUPER_ADMIN/VIEWER creation | **Resolved** — `POST /admin`, Super Admin only |
+| `conflict_status` UNDER_REVIEW/REJECTED unreachable | **Resolved** — `PUT /:id/status` |
+| No notification-creation UI | **Resolved** — dedicated page added |
+| `/reports/export` missing | **Resolved** — CSV |
+| `POST /attendance/manual` missing | **Resolved**, redesigned to resolve a session rather than require one |
+| Device health/sync-history missing | **Resolved** |
+| No room/faculty double-booking guard | **Resolved** for create — not update |
+| No face-embedding sync | **Resolved** (network contract) — Android storage/matching logic still open |
+| No device-side conflict push/resolve | **Resolved** — `POST /sync/conflicts`, `PUT /sync/conflicts/:id/resolve` |
+| Conflicts never synced down to devices | **Resolved** — `conflicts[]` added to full/incremental sync |
+| No device-side student enrollment | **Resolved** — `POST /sync/students/enroll` |
+| No device-side change-log push | **Resolved** — `POST /devices/change-log` |
+| No device-scoped reports pull | **Resolved** — `GET /sync/reports` |
+| `GET /devices/{deviceId}` documented as public/device-usable but is requireAuth-only, always 401s a device | **Resolved** — added `GET /devices/me` (device-authed, never returns device_token); the original `GET /:deviceId` is left as-is (website/admin only) since narrowing its auth would be a breaking change for the admin UI |
+
+Two items remain genuinely open, both on the Android side specifically:
+1. The most-recent-wins merge logic for `attendanceUpdates` (and now `conflicts`) against the local Room database.
+2. Storing/using synced `embeddings` for on-device cross-device recognition.
+
+Also still open, not Android-specific:
+3. Faculty row-scoping is not applied to the daily/summary/department report aggregates (a
+   deliberate choice, not an oversight — see §1).
+4. The timetable double-booking guard (§7) only fires on create, not update.
+5. `POST /sync/conflicts` requires a resolvable `timetable_id` + `session_date` per record
+   (the DB's `conflict.attendance_session_id` is `NOT NULL`) — a conflict raised outside any
+   tracked session (e.g. Android's "no_session" fallback) can't be pushed and is dropped
+   client-side rather than sent with nulls. This is a schema constraint, not a bug, but
+   worth knowing if that fallback path turns out to matter in practice.
+6. `POST /sync/students/enroll`'s `gender`/`admission_year` are `NOT NULL` on the `student`
+   table with no default. Android's on-device enrollment UI (`EnrollmentFragment`) doesn't
+   currently collect either field, so on-device enrollments silently skip the upload (retried
+   every sync cycle) until that UI gap is closed — a backend/UI mismatch, not a backend gap.
+
+Everything else from the previous gap list has a real fix in the current backend and
+frontend, not just a route stub.

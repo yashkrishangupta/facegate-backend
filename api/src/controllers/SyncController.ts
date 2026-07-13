@@ -96,3 +96,66 @@ export const uploadEmbedding = async (req: Request, res: Response) => {
         res.status(400).json({ success: false, message: err?.message || "Embedding upload failed" });
     }
 };
+
+export const enrollStudent = async (req: Request, res: Response) => {
+    try {
+        const { deviceId } = getDeviceContext(req);
+        const result = await SyncService.enrollStudent(deviceId, req.body);
+
+        res.status(201).json({
+            success: true,
+            message: "Student enrolled successfully",
+            data: { student_id: result.student_id, embedding_id: result.embedding_id }
+        });
+    } catch (err: any) {
+        console.error(err);
+        res.status(400).json({ success: false, message: err?.message || "Student enrollment failed" });
+    }
+};
+
+export const uploadConflicts = async (req: Request, res: Response) => {
+    try {
+        const { deviceId } = getDeviceContext(req);
+        const result = await SyncService.uploadConflicts(deviceId, req.body);
+
+        res.status(200).json({
+            success: true,
+            message: "Conflicts uploaded successfully",
+            data: result
+        });
+    } catch (err: any) {
+        console.error(err);
+        res.status(400).json({ success: false, message: err?.message || "Conflict upload failed" });
+    }
+};
+
+export const resolveConflict = async (req: Request, res: Response) => {
+    try {
+        const { deviceId } = getDeviceContext(req);
+        const conflictId = req.params.conflictId as string;
+        const { conflict_status } = req.body;
+
+        await SyncService.resolveConflict(deviceId, conflictId, conflict_status);
+
+        res.status(200).json({
+            success: true,
+            message: `Conflict marked ${conflict_status}`
+        });
+    } catch (err: any) {
+        console.error(err);
+        res.status(400).json({ success: false, message: err?.message || "Failed to resolve conflict" });
+    }
+};
+
+export const getReports = async (req: Request, res: Response) => {
+    try {
+        const { deviceId, roomId } = getDeviceContext(req);
+        const since = req.query.since as string | undefined;
+        const reports = await SyncService.getReports(deviceId, roomId, since);
+
+        res.status(200).json({ success: true, data: reports });
+    } catch (err: any) {
+        console.error(err);
+        res.status(500).json({ success: false, message: "Failed to fetch reports" });
+    }
+};

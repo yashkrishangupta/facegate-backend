@@ -1,10 +1,7 @@
 # FaceGate Database Reference
 
-PostgreSQL. Source of truth is `facegate-backend/api/src/db/schema.sql` — this document
-describes it in prose; if the two disagree, `schema.sql` wins. Written for anyone fixing the
-Android app, so tables the app actually touches (`device`, `timetable`, `student`,
-`holiday`, `attendance`, `attendance_session`) are called out explicitly wherever they
-matter.
+PostgreSQL, 19 tables. Source of truth is `facegate-backend/api/src/db/schema.sql`; if this document and that file disagree, `schema.sql` wins. Written for anyone fixing the Android app, so tables it actually touches
+(`device`, `timetable`, `student`, `holiday`, `attendance`, `attendance_session`, `face_embedding`) are called out explicitly.
 
 All tables use `gen_random_uuid()` primary keys, and almost all have `is_active BOOLEAN`
 (soft delete), `created_at`, `updated_at`. Only deviations from that pattern are noted.
@@ -14,9 +11,12 @@ All tables use `gen_random_uuid()` primary keys, and almost all have `is_active 
 ## Entity groups
 
 ```
-department ─┬─ batch ─┬─ student
+department ─┬─ batch ──┬─ student
             ├─ faculty ─┬─ admin_user (FACULTY role accounts)
             └─ subject  │
+                        │
+program ─────┬─ batch.program_id
+             └─ subject.program_id
                         │
 room ───────────────────┼─── device
                         │
@@ -41,22 +41,34 @@ admin_user ─── notification
 |---|---|---|
 | department_id | UUID PK | |
 | department_code | VARCHAR(10) | UNIQUE |
-| department_name | VARCHAR(100) | |
+| department_name | VARCHAR(100) | UNIQUE |
 | hod_name | VARCHAR(100) | nullable |
-| email | VARCHAR(100) | nullable |
+| email | VARCHAR(100) | nullable — CHECK: `NULL` or valid regex (empty string fails this; app code converts `''` → `NULL`) |
 | phone | VARCHAR(15) | nullable |
+
+### `program` — **new table**, previously a hardcoded 5-value string duplicated on `batch` and `subject`
+| Column | Type | Notes |
+|---|---|---|
+| program_id | UUID PK | |
+| program_code | VARCHAR(20) | UNIQUE |
+| program_name | VARCHAR(100) | e.g. "B.Tech Computer Science" |
+| degree_type | VARCHAR(20) | CHECK: `UG`, `PG`, `Doctoral` |
+| duration_years | INTEGER | CHECK `> 0` |
+
+`batch.program_id` and `subject.program_id` both FK here now — there is no free-text
+`program` column left on either table.
 
 ### `batch`
 | Column | Type | Notes |
 |---|---|---|
 | batch_id | UUID PK | |
 | department_id | UUID FK → department | |
-| batch_code | VARCHAR(30) | UNIQUE |
-| program | VARCHAR(20) | CHECK: `B.Tech`, `M.Tech`, `PhD`, `MBA`, `MCA` |
-| academic_year | VARCHAR(10) | e.g. `2026-27` |
+| batch_code | VARCHAR(20) | UNIQUE |
+| program_id | UUID FK → program | |
+| academic_year | VARCHAR(9) | e.g. `2026-27` |
 | semester | INT | CHECK 1–8 |
-| section | VARCHAR(5) | nullable |
-| strength | INT | expected headcount |
+| section | VARCHAR(5) | **NOT NULL, no default — genuinely required**, not optional despite reading like it might be |
+| strength | INT | **NOT NULL, no default — genuinely required** |
 | batch_advisor_id | UUID FK → faculty | nullable |
 
 ### `faculty`
@@ -66,16 +78,15 @@ admin_user ─── notification
 | department_id | UUID FK → department | |
 | employee_id | VARCHAR(20) | UNIQUE |
 | first_name, last_name | VARCHAR(50) | |
-| email | VARCHAR(100) | UNIQUE, NOT NULL |
+| email | VARCHAR(100) | UNIQUE, NOT NULL, regex-checked |
 | phone | VARCHAR(15) | nullable |
-| designation | VARCHAR(50) | e.g. Professor, Assistant Professor |
-| specialization | VARCHAR(200) | nullable |
+| designation | VARCHAR(50) | |
+| specialization | VARCHAR(100) | nullable |
 | joining_date | DATE | nullable |
 | office_location | VARCHAR(100) | nullable |
 
-Creating a faculty row also auto-creates its `admin_user` login (see below) — not a DB-level
-trigger, done in application code (`FacultyRepository.createFacultyWithAccount`, one
-transaction).
+Creating a faculty row also auto-creates its `admin_user` login in the same transaction
+(`FacultyRepository.createFacultyWithAccount`).
 
 ### `subject`
 | Column | Type | Notes |
@@ -84,12 +95,12 @@ transaction).
 | department_id | UUID FK → department | |
 | subject_code | VARCHAR(20) | UNIQUE |
 | subject_name | VARCHAR(100) | |
-| program | VARCHAR(20) | same CHECK list as batch.program |
+| program_id | UUID FK → program | |
 | semester | INT | CHECK 1–8 |
-| credits | INT | |
+| credits | INT | CHECK `> 0` |
 | subject_type | VARCHAR(20) | CHECK: `Theory`, `Lab`, `Tutorial` |
-| course_category | VARCHAR(20) | CHECK: `Core`, `Elective`, `Open Elective` |
-| contact_hours_per_week | INT | |
+| course_category | VARCHAR(20) | CHECK: `Core`, `Elective`, `Open Elective`; defaults `Core` |
+| contact_hours_per_week | INT | CHECK `> 0` |
 | description | TEXT | nullable |
 
 ### `room` — **Android-relevant** (every device belongs to exactly one)
@@ -110,12 +121,11 @@ transaction).
 |---|---|---|
 | calendar_id | UUID PK | |
 | calendar_date | DATE | |
-| academic_year | VARCHAR(10) | |
+| academic_year | VARCHAR | |
 | semester | INT | |
 | is_working_day | BOOLEAN | |
 | event_type | VARCHAR(20) | CHECK: `WORKING_DAY`, `HOLIDAY`, `EXAM`, `VACATION`, `EVENT` |
 | event_name | VARCHAR(100) | nullable |
-| description | TEXT | nullable |
 
 ---
 
@@ -129,23 +139,27 @@ transaction).
 | registration_number | VARCHAR(30) | UNIQUE |
 | roll_number | VARCHAR(20) | |
 | first_name, last_name | VARCHAR(50) | |
-| email | VARCHAR(100) | nullable |
+| email | VARCHAR(100) | nullable, regex CHECK when present (empty string converted to NULL server-side) |
 | phone | VARCHAR(15) | nullable |
-| gender | VARCHAR(10) | nullable |
+| gender | VARCHAR(10) | CHECK: `Male`, `Female`, `Other` |
 | date_of_birth | DATE | nullable |
-| admission_year | INT | nullable |
+| admission_year | INT | CHECK `>= 2000` |
 | profile_photo_url | TEXT | nullable |
 | student_status | VARCHAR(20) | CHECK: `ACTIVE`, `GRADUATED`, `SUSPENDED`, `DROPPED` |
 
+`GET /students` derives (never stores) an `enrollment_status` via `LEFT JOIN face_embedding`
+— `'ENROLLED'` if an `ACTIVE` embedding exists, else `'NOT_ENROLLED'`. `embedding_data`
+itself is never selected in that query.
+
 A device only ever receives students whose `batch_id` has at least one `timetable` row in
-that device's room — see api.md's Sync section for the exact query.
+that device's room.
 
 ### `admin_user` — website/faculty logins, **not used by Android**
 | Column | Type | Notes |
 |---|---|---|
 | admin_id | UUID PK | |
 | employee_id | VARCHAR(20) | UNIQUE |
-| username | VARCHAR(50) | UNIQUE, nullable — login key. Auto-generated for faculty (`firstname.lastname`, deduped with a trailing number on collision) |
+| username | VARCHAR(50) | UNIQUE, nullable — login key. Auto-generated for faculty (`firstname.lastname`, deduped with a trailing number); same generator now also backs direct `POST /admin` account creation |
 | faculty_id | UUID FK → faculty | UNIQUE, nullable — only set for `role = 'FACULTY'` rows |
 | first_name, last_name | VARCHAR(50) | |
 | email | VARCHAR(100) | UNIQUE, NOT NULL, regex-checked |
@@ -153,8 +167,12 @@ that device's room — see api.md's Sync section for the exact query.
 | role | VARCHAR(20) | CHECK: `SUPER_ADMIN`, `ADMIN`, `FACULTY`, `VIEWER` |
 | phone | VARCHAR(15) | nullable |
 | last_login | TIMESTAMP | nullable |
-| account_status | VARCHAR(20) | `ACTIVE` / `DISABLED` (deactivating a faculty member sets this) |
-| failed_login_attempts | INT | reset to 0 on successful login or on an `ACTIVE` status reset |
+| account_status | VARCHAR(20) | `ACTIVE` / `DISABLED` |
+| failed_login_attempts | INT | reset on successful login or an `ACTIVE` status reset |
+
+Two ways a row gets created: `POST /faculty` (always `role='FACULTY'`, atomic with the
+`faculty` row) or `POST /admin` (`SUPER_ADMIN` only, direct — `ADMIN`/`SUPER_ADMIN`/`VIEWER`,
+never `FACULTY`, since that would leave an orphaned login with no teaching record).
 
 ---
 
@@ -167,16 +185,18 @@ that device's room — see api.md's Sync section for the exact query.
 | batch_id | UUID FK → batch | |
 | faculty_id | UUID FK → faculty | |
 | subject_id | UUID FK → subject | |
-| room_id | UUID FK → room | **this is the sync filter key** |
-| day_of_week | VARCHAR(10) | Monday–Sunday |
+| room_id | UUID FK → room | **the sync filter key** |
+| day_of_week | VARCHAR(10) | Monday–Saturday (no Sunday value) |
 | lecture_number | INT | |
 | start_time, end_time | TIME | |
-| attendance_window_minutes | INT | how long after start_time attendance can still be marked |
-| effective_from, effective_to | DATE | nullable — for schedule changes mid-semester |
-| updated_at | TIMESTAMP | used for delta sync (`?since=`) |
+| attendance_window_minutes | INT | |
+| effective_from | DATE | **NOT NULL, no default** — the create API defaults it to today if the caller omits it, but the column itself has no DB-level default |
+| effective_to | DATE | nullable |
+| updated_at | TIMESTAMP | used for delta sync |
 
-UNIQUE on `(batch_id, day_of_week, lecture_number)` — a batch can't have two lectures in the
-same slot.
+UNIQUE on `(batch_id, day_of_week, lecture_number)`. The application layer (not the DB)
+additionally rejects a create where a *different* batch already has an overlapping room or
+faculty booking at the same day/time — checked on create only, not on update.
 
 ### `attendance_session` — created lazily, not synced down directly
 | Column | Type | Notes |
@@ -186,15 +206,13 @@ same slot.
 | session_date | DATE | |
 | start_time, end_time | TIME | |
 | session_status | VARCHAR(20) | `SCHEDULED` / `ACTIVE` / `COMPLETED` / `CANCELLED` |
-| attendance_window_start, attendance_window_end | TIMESTAMP | nullable |
+| attendance_mode | VARCHAR(20) | CHECK: `FACE_RECOGNITION`, `MANUAL`, `HYBRID`; default `FACE_RECOGNITION` |
 | total_students, present_students, absent_students | INT | denormalized counts |
-| attendance_mode | VARCHAR(20) | nullable |
 
-UNIQUE constraint `uq_session_per_day` on `(timetable_id, session_date)` — **this is the
-constraint the sync upload endpoint relies on** to safely create-or-reuse a session row when
-a device pushes attendance (see api.md). The device never invents a session UUID for the
-server to trust; it sends `timetable_id` + `session_date` and the server resolves the real
-row.
+UNIQUE `uq_session_per_day` on `(timetable_id, session_date)` — the constraint both the
+device sync path (`POST /sync/attendance`) and the website's manual-marking path
+(`POST /attendance/manual`) rely on to safely create-or-reuse the one real session row for a
+given period/date, rather than trusting a client-invented session ID.
 
 ### `holiday` — **Android-relevant** (syncs down, global — not room-filtered)
 | Column | Type | Notes |
@@ -202,9 +220,13 @@ row.
 | holiday_id | UUID PK | |
 | calendar_id | UUID FK → academic_calendar | |
 | holiday_name | VARCHAR(100) | |
-| holiday_type | VARCHAR(30) | nullable |
+| holiday_type | VARCHAR(30) | CHECK: `NATIONAL`, `INSTITUTIONAL`, `FESTIVAL`, `EMERGENCY`, `GAZETTED` |
 | is_recurring | BOOLEAN | |
 | created_by | UUID FK → admin_user | nullable |
+
+The `POST /holidays` request body sends a flat `holiday_date`/`academic_year`/`semester`
+even though this table has no date column itself — `HolidayRepository` transparently
+upserts the matching `academic_calendar` row first.
 
 ---
 
@@ -213,56 +235,55 @@ row.
 ### `device` — **Android-relevant**, the core identity table
 | Column | Type | Notes |
 |---|---|---|
-| device_id | UUID PK | this device's permanent identity, returned once at pairing |
+| device_id | UUID PK | permanent identity, returned once at pairing |
 | room_id | UUID FK → room | |
-| device_identifier | VARCHAR(100) | UNIQUE, nullable — `Manufacturer-Model-UUID`, set at pairing, audit-only, not used for auth |
+| device_identifier | VARCHAR(100) | UNIQUE, nullable — set at pairing, audit-only |
 | device_name | VARCHAR(100) | set by admin at creation |
 | device_type | VARCHAR(30) | CHECK: `ANDROID_TABLET`, `ANDROID_PHONE` |
 | app_version | VARCHAR(20) | nullable until paired |
 | operating_system | VARCHAR(50) | nullable until paired |
-| device_token | UUID | UNIQUE, nullable — **the actual credential**, only ever set once, at pairing. Sent as `x-api-key` on every protected device call |
-| pairing_code | VARCHAR(6) | UNIQUE, nullable — cleared the moment it's redeemed |
+| device_token | UUID | UNIQUE, nullable — **the actual credential**, set once at pairing |
+| pairing_code | VARCHAR(6) | UNIQUE, nullable — cleared on redemption |
 | pairing_code_expires_at | TIMESTAMP | nullable — 15 minutes from creation |
-| registration_date | TIMESTAMP | set (or reset) when pairing completes |
 | last_heartbeat, last_sync | TIMESTAMP | nullable |
-| battery_percentage, storage_available_mb | INT | nullable, sent via heartbeat |
-| network_status | VARCHAR(20) | CHECK: `ONLINE` / `OFFLINE` (check the actual constraint in schema.sql for the full list) |
+| battery_percentage, storage_available_mb | INT | nullable, via heartbeat |
+| network_status | VARCHAR(20) | `ONLINE` / `OFFLINE` |
 | device_status | VARCHAR(20) | CHECK: `PENDING_PAIRING`, `ACTIVE`, `INACTIVE`, `MAINTENANCE`, `LOST` |
 
 **Partial unique index** `uq_device_one_active_per_room` on `room_id` `WHERE device_status =
-'ACTIVE' AND is_active = TRUE` — a room can have at most one ACTIVE device. Enforced at the
-DB level as a backstop; the API also checks and returns a friendly 409/400 before ever
-hitting this constraint.
+'ACTIVE' AND is_active = TRUE`. `GET /:deviceId/health` and `GET /:deviceId/sync-history`
+read this table plus `device_sync_log` — no schema changes needed for those, the data was
+already there.
 
-### `attendance` — **Android-relevant**, what the device pushes up
+### `attendance` — **Android-relevant**, what the device pushes up (and now also pulls down)
 | Column | Type | Notes |
 |---|---|---|
-| attendance_id | UUID PK | server-generated — **do not treat as stable across a retry**; upsert key is `(attendance_session_id, student_id)`, not this column |
+| attendance_id | UUID PK | not stable across a retry — upsert key is `(attendance_session_id, student_id)` |
 | attendance_session_id | UUID FK → attendance_session | |
 | student_id | UUID FK → student | |
-| device_id | UUID FK → device | nullable |
+| device_id | UUID FK → device | nullable — NULL for website-authored manual marks |
 | attendance_status | VARCHAR(20) | CHECK: `PRESENT`, `ABSENT`, `LATE`, `EXCUSED` |
 | attendance_mode | VARCHAR(20) | e.g. `FACE_RECOGNITION`, `MANUAL` |
 | recognition_confidence | NUMERIC | nullable |
-| attendance_time | TIMESTAMP | when the mark actually happened, device-supplied |
-| verification_status | VARCHAR(20) | nullable |
-| synced | BOOLEAN | **the flag from the architecture doc** — true once the server has 200'd the row |
-| synced_at | TIMESTAMP | nullable |
-| updated_at | TIMESTAMP | bumped on every write, including website manual corrections |
+| attendance_time | TIMESTAMP | |
+| synced | BOOLEAN | true once the server has 200'd the row |
+| updated_at | TIMESTAMP | bumped on every write, including manual corrections — **this is what the new attendance-down sync compares for most-recent-wins** |
 
-UNIQUE `uq_student_session` on `(attendance_session_id, student_id)` — this is what makes the
-batch upload endpoint's `ON CONFLICT ... DO UPDATE` upsert safe to retry.
+UNIQUE `uq_student_session` on `(attendance_session_id, student_id)`.
 
-### `face_embedding`
+### `face_embedding` — **Android-relevant, now syncs both directions**
 | Column | Type | Notes |
 |---|---|---|
 | embedding_id | UUID PK | |
-| student_id | UUID FK → student | **UNIQUE — one embedding per student**, not one row per capture |
-| embedding_version | INT | |
-| embedding_data | JSONB | the actual feature vector |
+| student_id | UUID FK → student | **UNIQUE — one embedding per student** |
+| embedding_version | INT/VARCHAR | |
+| embedding_data | JSONB | the feature vector — **never selected in the Students-list join, only in the dedicated sync payload** |
 | model_name | VARCHAR(50) | |
 | confidence_threshold | NUMERIC | |
 | embedding_status | VARCHAR(20) | CHECK: `ACTIVE`, `INACTIVE`, `REVOKED` |
+
+Down: included in `POST /sync/full` and `GET /sync/incremental` for students in the
+device's room. Up: `POST /sync/embeddings`, upserts on `student_id`.
 
 ### `device_sync_log`
 | Column | Type | Notes |
@@ -275,34 +296,43 @@ batch upload endpoint's `ON CONFLICT ... DO UPDATE` upsert safe to retry.
 | records_uploaded, records_downloaded, failed_records | INT | |
 | error_message | TEXT | nullable |
 
-Written automatically by every sync/pair call — not something the Android app writes to
-directly, just useful for debugging sync issues from the DB side.
+Written automatically by every sync/pair/embedding-upload call. `GET /devices/:id/health`
+and `GET /devices/:id/sync-history` read this table back.
 
 ---
 
 ## Admin / ops
 
 ### `notification`
-admin_id (FK→admin_user), title, message, notification_type, priority, is_read.
+admin_id (FK→admin_user, nullable), title, message, notification_type (CHECK: `SYSTEM`,
+`ATTENDANCE`, `DEVICE`, `CONFLICT`, `SYNC`, `HOLIDAY`, `TIMETABLE`, `SECURITY`,
+`ANNOUNCEMENT`), priority (CHECK: `LOW`/`MEDIUM`/`HIGH`/`CRITICAL`), is_read.
 
 ### `conflict`
 attendance_id/attendance_session_id/student_id/device_id (FKs), conflict_type (CHECK:
 `LOW_CONFIDENCE`, `DUPLICATE_ATTENDANCE`, `SYNC_FAILURE`, `MANUAL_REVIEW`, `DEVICE_ERROR`,
-`UNKNOWN_FACE`), severity, conflict_status (`PENDING`/`UNDER_REVIEW`/`RESOLVED`/`REJECTED`),
-resolved_by (FK→admin_user).
+`UNKNOWN_FACE`), severity (`LOW`/`MEDIUM`/`HIGH`/`CRITICAL`), conflict_status (`PENDING`/
+`UNDER_REVIEW`/`RESOLVED`/`REJECTED` — all four now reachable via `PUT /:id/resolve` and
+`PUT /:id/status`), resolution_notes, resolved_by (FK→admin_user), resolved_at.
 
 ### `change_log`
-admin_id (FK→admin_user, nullable — some system actions have no human actor), entity_name,
-entity_id, action (CHECK: `CREATE`, `UPDATE`, `DELETE`, `LOGIN`, `LOGOUT`, `SYNC`, `RESOLVE`,
-`EXPORT`), old_values/new_values (JSONB), action_timestamp. Passwords are never written into
-old_values/new_values, only a boolean flag that a reset happened.
+admin_id (FK→admin_user, nullable), entity_name, entity_id, action (CHECK: `CREATE`,
+`UPDATE`, `DELETE`, `LOGIN`, `LOGOUT`, `SYNC`, `RESOLVE`, `EXPORT` — only the first four plus
+`LOGIN` are actually written anywhere currently), old_values/new_values (JSONB, passwords
+never included). Written via a shared `recordChange()` helper called from Room/Device/
+Faculty/Admin/Batch create-update-deactivate flows and login events.
 
 ---
 
 ## What Android's local Room database should mirror
 
-Based on what actually syncs down, the local schema only needs to shadow: `room` (just this
-device's own row — id + number), `timetable` (filtered to this room), `student` (filtered to
-batches taught in this room), `holiday` (all of them), and its own `attendance` rows pending
-upload (`synced: Boolean` flag, matching the server column name/semantics exactly). Nothing
-else in this document needs a local counterpart.
+Based on what actually syncs, the local schema should shadow: `room` (this device's own row),
+`timetable` (filtered to this room), `student` (filtered to batches taught in this room,
+including `enrollment_status`), `holiday` (all of them), `face_embedding` (**new** — students
+in this room's batches, for cross-device recognition), and its own `attendance` rows pending
+upload (`synced: Boolean`, matching the server column semantics exactly).
+
+**New requirement, not yet implemented on the Android side:** a way to reconcile
+`attendanceUpdates` (server-authored corrections) against local rows using most-recent-wins
+on `updated_at` — see `api.md` and `API_CONTRACT.md` for the exact merge rule. This needs an
+`updated_at` (or equivalent) field tracked locally per attendance row if it isn't already.
