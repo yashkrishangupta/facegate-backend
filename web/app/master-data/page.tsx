@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiFetch, isLoggedIn, getAdmin } from '../../lib/auth'
 
-type Tab = 'departments' | 'programs' | 'batches' | 'subjects' | 'faculty' | 'calendar'
+type Tab = 'departments' | 'programs' | 'batches' | 'subjects' | 'faculty' | 'admins' | 'calendar'
 
 const DEGREE_TYPES = ['UG', 'PG', 'Doctoral']
 const SUBJECT_TYPES = ['Theory', 'Lab', 'Tutorial']
@@ -13,12 +13,13 @@ const DESIGNATIONS = ['Professor', 'Associate Professor', 'Assistant Professor',
 
 const TAB_LABELS: Record<Tab, string> = {
   departments: 'Departments', programs: 'Programs', batches: 'Batches',
-  subjects: 'Subjects', faculty: 'Faculty', calendar: 'Academic Calendar'
+  subjects: 'Subjects', faculty: 'Faculty', admins: 'Admin Users', calendar: 'Academic Calendar'
 }
 
 export default function MasterDataPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('departments')
+  const isSuperAdmin = getAdmin()?.role === 'SUPER_ADMIN'
 
   useEffect(() => {
     if (!isLoggedIn()) router.push('/login')
@@ -32,7 +33,7 @@ export default function MasterDataPage() {
           <h1 className="text-2xl font-bold">Master Data</h1>
         </div>
         <div className="flex gap-2 mb-6 border-b border-[#2F4E73] overflow-x-auto">
-          {(Object.keys(TAB_LABELS) as Tab[]).map(t => (
+          {(Object.keys(TAB_LABELS) as Tab[]).filter(t => t !== 'admins' || isSuperAdmin).map(t => (
             <button key={t} onClick={() => setTab(t)}
               className={`px-4 py-2 text-sm font-semibold whitespace-nowrap ${tab === t ? 'text-[#4ADE80] border-b-2 border-[#4ADE80]' : 'text-[#90A6BD]'}`}>
               {TAB_LABELS[t]}
@@ -44,6 +45,7 @@ export default function MasterDataPage() {
         {tab === 'batches' && <BatchesTab />}
         {tab === 'subjects' && <SubjectsTab />}
         {tab === 'faculty' && <FacultyTab />}
+        {tab === 'admins' && isSuperAdmin && <AdminsTab />}
         {tab === 'calendar' && <CalendarTab />}
       </div>
     </main>
@@ -573,6 +575,108 @@ function FacultyTab() {
               {resetting ? 'Resetting...' : 'Reset Password'}
             </button>
           </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+function AdminsTab() {
+  const [items, setItems] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showModal, setShowModal] = useState(false)
+  const [error, setError] = useState('')
+  const [createdUsername, setCreatedUsername] = useState('')
+  const [form, setForm] = useState({
+    employee_id: '', first_name: '', last_name: '', email: '', phone: '',
+    role: 'ADMIN', password: ''
+  })
+
+  const fetchItems = async () => {
+    setLoading(true)
+    try { const res = await apiFetch('/admin'); const json = await res.json(); setItems(json.data || []) }
+    catch { setItems([]) } finally { setLoading(false) }
+  }
+  useEffect(() => { fetchItems() }, [])
+
+  const handleCreate = async () => {
+    setError('')
+    try {
+      const res = await apiFetch('/admin', { method: 'POST', body: JSON.stringify(form) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to create admin'); return }
+      setCreatedUsername(json.data.username)
+      fetchItems()
+    } catch { setError('Network error') }
+  }
+
+  const closeModal = () => {
+    setShowModal(false); setError(''); setCreatedUsername('')
+    setForm({ employee_id: '', first_name: '', last_name: '', email: '', phone: '', role: 'ADMIN', password: '' })
+  }
+
+  const handleDeactivate = async (id: string) => {
+    if (!confirm('Deactivate this account?')) return
+    await apiFetch(`/admin/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetchItems()
+  }
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-[#90A6BD] text-sm">
+          Direct account creation for ADMIN/SUPER_ADMIN/VIEWER roles — use the Faculty tab instead for FACULTY accounts, since those also need a teaching record.
+        </p>
+        <button onClick={() => setShowModal(true)} className="bg-[#4ADE80] text-black font-bold px-5 py-2 rounded-xl text-sm whitespace-nowrap">+ New Admin</button>
+      </div>
+      {loading ? <p className="text-[#90A6BD]">Loading...</p> : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {items.filter((a: any) => a.role !== 'FACULTY').map((a: any) => (
+            <div key={a.admin_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-white font-bold">{a.first_name} {a.last_name}</p>
+                  <p className="text-[#90A6BD] text-sm">{a.username} · {a.role}</p>
+                </div>
+                <span className={`text-xs px-2 py-1 rounded-full ${a.account_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A1A] text-[#F87171]'}`}>
+                  {a.account_status}
+                </span>
+              </div>
+              <button onClick={() => handleDeactivate(a.admin_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {showModal && (
+        <Modal title={createdUsername ? 'Admin created' : 'New Admin Account'} onClose={closeModal}>
+          {createdUsername ? (
+            <>
+              <p className="text-[#90A6BD] text-sm mb-4">Share this username with them.</p>
+              <p className="text-center text-2xl font-mono font-bold text-[#4ADE80] bg-[#0D1727] rounded-xl py-6 mb-5">{createdUsername}</p>
+              <button onClick={closeModal} className="w-full bg-[#4ADE80] text-black font-semibold rounded-lg py-2 text-sm">Done</button>
+            </>
+          ) : (
+            <>
+              {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <input placeholder="First Name" value={form.first_name} onChange={(e) => setForm(p => ({ ...p, first_name: e.target.value }))} className={inputCls} />
+                <input placeholder="Last Name" value={form.last_name} onChange={(e) => setForm(p => ({ ...p, last_name: e.target.value }))} className={inputCls} />
+                <input placeholder="Employee ID" value={form.employee_id} onChange={(e) => setForm(p => ({ ...p, employee_id: e.target.value }))} className={`col-span-2 ${inputCls}`} />
+                <input placeholder="Email" type="email" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} className={`col-span-2 ${inputCls}`} />
+                <input placeholder="Phone (optional)" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} className={`col-span-2 ${inputCls}`} />
+                <select value={form.role} onChange={(e) => setForm(p => ({ ...p, role: e.target.value }))} className={`col-span-2 ${inputCls}`}>
+                  <option value="ADMIN">ADMIN</option>
+                  <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                  <option value="VIEWER">VIEWER</option>
+                </select>
+                <input placeholder="Initial Password (min 8 chars)" type="password" value={form.password} onChange={(e) => setForm(p => ({ ...p, password: e.target.value }))} className={`col-span-2 ${inputCls}`} />
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={closeModal} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+                <button onClick={handleCreate} className="flex-1 bg-[#4ADE80] text-black font-semibold rounded-lg py-2 text-sm">Create</button>
+              </div>
+            </>
+          )}
         </Modal>
       )}
     </div>

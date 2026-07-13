@@ -2,6 +2,7 @@ import { Router } from "express";
 
 import {
     markAttendance,
+    markAttendanceManual,
     getAttendanceBySession,
     getAttendanceByStudent,
     updateAttendance,
@@ -29,6 +30,9 @@ router.post("/mark", deviceAuth, markAttendance);
 // ("only sessions I teach") is NOT yet enforced in the query layer — see
 // the same caveat on reports.ts/conflicts.ts.
 router.use(requireAuth);
+
+// Manual Attendance (bulk, whole session, from the website)
+router.post("/manual", markAttendanceManual);
 
 // Attendance Summary
 router.get("/summary/:sessionId", getAttendanceSummary);

@@ -24,6 +24,69 @@ const SELECT_ATTENDANCE = `
     JOIN student s ON s.student_id = a.student_id
 `;
 
+/**
+ * Manual attendance — an admin/faculty marking a whole session at once from
+ * the website, distinct from markAttendance (device, single record).
+ * Resolves/creates the attendance_session from (timetable_id, session_date)
+ * the same way the device sync path does — the website has no separate way
+ * to create a session, so requiring a pre-existing session_id here would
+ * make this endpoint uncallable for a period nobody has synced yet.
+ */
+export const markAttendanceManual = async (
+    timetableId: string,
+    sessionDate: string,
+    records: { student_id: string; status: string }[]
+) => {
+    const client = await pool.connect();
+    let marked = 0;
+    try {
+        await client.query("BEGIN");
+
+        const inserted = await client.query(
+            `INSERT INTO attendance_session
+                (attendance_session_id, timetable_id, session_date, start_time, end_time, session_status)
+             SELECT gen_random_uuid(), t.timetable_id, $2, t.start_time, t.end_time, 'ACTIVE'
+             FROM timetable t
+             WHERE t.timetable_id = $1
+             ON CONFLICT ON CONSTRAINT uq_session_per_day DO NOTHING
+             RETURNING attendance_session_id`,
+            [timetableId, sessionDate]
+        );
+        const sessionId = inserted.rows[0]?.attendance_session_id
+            ?? (await client.query(
+                `SELECT attendance_session_id FROM attendance_session
+                 WHERE timetable_id = $1 AND session_date = $2`,
+                [timetableId, sessionDate]
+            )).rows[0]?.attendance_session_id;
+
+        if (!sessionId) throw new Error("Could not resolve a session for this timetable/date");
+
+        for (const r of records) {
+            await client.query(
+                `INSERT INTO attendance
+                    (attendance_session_id, student_id, attendance_status,
+                     attendance_mode, attendance_time, synced)
+                 VALUES ($1, $2, $3, 'MANUAL', CURRENT_TIMESTAMP, TRUE)
+                 ON CONFLICT ON CONSTRAINT uq_student_session
+                 DO UPDATE SET
+                    attendance_status = EXCLUDED.attendance_status,
+                    attendance_mode = 'MANUAL',
+                    attendance_time = CURRENT_TIMESTAMP,
+                    updated_at = CURRENT_TIMESTAMP`,
+                [sessionId, r.student_id, r.status || "PRESENT"]
+            );
+            marked++;
+        }
+        await client.query("COMMIT");
+    } catch (err) {
+        await client.query("ROLLBACK");
+        throw err;
+    } finally {
+        client.release();
+    }
+    return { marked };
+};
+
 export const markAttendance = async (attendanceData: any) => {
 
     const {
@@ -68,20 +131,42 @@ export const markAttendance = async (attendanceData: any) => {
     return result.rows[0];
 };
 
-export const getAttendanceBySession = async (sessionId: string) => {
+export const getAttendanceBySession = async (sessionId: string, facultyId?: string | null) => {
+    const values: any[] = [sessionId];
+    let facultyClause = "";
+    if (facultyId) {
+        values.push(facultyId);
+        facultyClause = `AND EXISTS (
+            SELECT 1 FROM attendance_session ases
+            JOIN timetable t ON t.timetable_id = ases.timetable_id
+            WHERE ases.attendance_session_id = a.attendance_session_id
+              AND t.faculty_id = $${values.length}
+        )`;
+    }
     const result = await pool.query(
-        `${SELECT_ATTENDANCE} WHERE a.attendance_session_id = $1 AND a.is_active = TRUE
+        `${SELECT_ATTENDANCE} WHERE a.attendance_session_id = $1 AND a.is_active = TRUE ${facultyClause}
          ORDER BY a.attendance_time`,
-        [sessionId]
+        values
     );
     return result.rows;
 };
 
-export const getAttendanceByStudent = async (studentId: string) => {
+export const getAttendanceByStudent = async (studentId: string, facultyId?: string | null) => {
+    const values: any[] = [studentId];
+    let facultyClause = "";
+    if (facultyId) {
+        values.push(facultyId);
+        facultyClause = `AND EXISTS (
+            SELECT 1 FROM attendance_session ases
+            JOIN timetable t ON t.timetable_id = ases.timetable_id
+            WHERE ases.attendance_session_id = a.attendance_session_id
+              AND t.faculty_id = $${values.length}
+        )`;
+    }
     const result = await pool.query(
-        `${SELECT_ATTENDANCE} WHERE a.student_id = $1 AND a.is_active = TRUE
+        `${SELECT_ATTENDANCE} WHERE a.student_id = $1 AND a.is_active = TRUE ${facultyClause}
          ORDER BY a.attendance_time DESC`,
-        [studentId]
+        values
     );
     return result.rows;
 };

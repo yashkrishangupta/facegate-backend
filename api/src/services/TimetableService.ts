@@ -61,6 +61,24 @@ export const createTimetable = async (
         effective_from: timetableData.effective_from || new Date().toISOString().slice(0, 10)
     };
 
+    // The DB's own unique constraint only catches a clash for the SAME
+    // batch — this catches a different batch double-booking the same room
+    // or the same faculty member at an overlapping time.
+    const clash = await TimetableRepository.findSchedulingClash({
+        room_id: dataWithDefaults.room_id,
+        faculty_id: dataWithDefaults.faculty_id,
+        day_of_week: dataWithDefaults.day_of_week,
+        start_time: dataWithDefaults.start_time,
+        end_time: dataWithDefaults.end_time
+    });
+    if (clash) {
+        throw new Error(
+            clash.clash_type === "room"
+                ? `Room is already booked for batch ${clash.batch_code} at this day/time`
+                : `Faculty is already teaching batch ${clash.batch_code} at this day/time`
+        );
+    }
+
     return await TimetableRepository.createTimetable(dataWithDefaults);
 };
 

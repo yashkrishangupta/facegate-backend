@@ -1,6 +1,9 @@
 import { Request, Response } from "express";
 import * as ConflictService from "../services/ConflictService";
 
+const facultyScope = (req: Request): string | null =>
+    req.user?.role === "FACULTY" ? req.user.facultyId : null;
+
 /**
  * Get All Conflicts
  */
@@ -13,7 +16,8 @@ export const getAllConflicts = async (
 
         const { status, severity, conflict_type, room_id, from_date, to_date } = req.query;
         const conflicts = await ConflictService.getAllConflicts({
-            status, severity, conflict_type, room_id, from_date, to_date
+            status, severity, conflict_type, room_id, from_date, to_date,
+            faculty_id: facultyScope(req)
         });
 
         res.status(200).json({
@@ -152,6 +156,40 @@ export const deleteConflict = async (
         res.status(500).json({
             success: false,
             message: "Failed to delete conflict"
+        });
+
+    }
+
+};
+/**
+ * PUT /conflicts/:conflictId/status — direct transition to UNDER_REVIEW or
+ * REJECTED (RESOLVED still goes through /resolve above, which additionally
+ * requires resolution notes).
+ */
+export const updateConflictStatus = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const conflictId = req.params.conflictId as string;
+        const { status, notes } = req.body;
+        const conflict = await ConflictService.updateConflictStatus(
+            conflictId, status, req.user?.adminId ?? null, notes
+        );
+
+        res.status(200).json({
+            success: true,
+            message: `Conflict marked ${status}`,
+            data: conflict
+        });
+
+    } catch (err: any) {
+
+        res.status(400).json({
+            success: false,
+            message: err?.message || "Failed to update conflict status"
         });
 
     }

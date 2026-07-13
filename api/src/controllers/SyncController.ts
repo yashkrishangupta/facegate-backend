@@ -81,3 +81,18 @@ export const retrySync = async (req: Request, res: Response) => {
         res.status(500).json({ success: false, message: "Retry failed" });
     }
 };
+export const uploadEmbedding = async (req: Request, res: Response) => {
+    try {
+        const { deviceId } = getDeviceContext(req);
+        const result = await SyncService.uploadEmbedding(deviceId, req.body);
+
+        res.status(200).json({
+            success: true,
+            message: "Embedding uploaded successfully",
+            data: result
+        });
+    } catch (err: any) {
+        console.error(err);
+        res.status(400).json({ success: false, message: err?.message || "Embedding upload failed" });
+    }
+};

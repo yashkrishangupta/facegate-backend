@@ -7,6 +7,51 @@ import pool from "../config/database";
  * architecture doc ("one attendance table, filterable by SQL WHERE+JOIN").
  */
 
+/**
+ * Raw attendance rows for CSV export — one row per attendance record,
+ * scoped by whichever report type/id the Reports page currently has open.
+ */
+export const getExportRows = async (
+    reportType: "student" | "batch" | "subject",
+    id: string,
+    from?: string,
+    to?: string
+) => {
+    const idColumn = reportType === "student" ? "a.student_id"
+        : reportType === "batch" ? "s.batch_id"
+        : "t.subject_id";
+
+    const conditions = [`${idColumn} = $1`, "a.is_active = TRUE"];
+    const values: any[] = [id];
+
+    if (from) { values.push(from); conditions.push(`a.attendance_time::date >= $${values.length}`); }
+    if (to) { values.push(to); conditions.push(`a.attendance_time::date <= $${values.length}`); }
+
+    const result = await pool.query(
+        `SELECT
+            a.attendance_time::date AS date,
+            s.first_name || ' ' || s.last_name AS student_name,
+            s.roll_number,
+            b.batch_code,
+            sub.subject_code,
+            sub.subject_name,
+            f.first_name || ' ' || f.last_name AS faculty_name,
+            a.attendance_status AS status,
+            a.attendance_mode
+         FROM attendance a
+         JOIN student s ON s.student_id = a.student_id
+         JOIN batch b ON b.batch_id = s.batch_id
+         JOIN attendance_session ases ON ases.attendance_session_id = a.attendance_session_id
+         JOIN timetable t ON t.timetable_id = ases.timetable_id
+         JOIN subject sub ON sub.subject_id = t.subject_id
+         JOIN faculty f ON f.faculty_id = t.faculty_id
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY a.attendance_time DESC`,
+        values
+    );
+    return result.rows;
+};
+
 export const getDailyReport = async (date?: string) => {
 
     const targetDate = date ?? new Date().toISOString().slice(0, 10);

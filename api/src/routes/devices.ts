@@ -5,6 +5,8 @@ import { requireAuth, requireAdmin } from "../middleware/auth";
 import {
     getAllDevices,
     getDeviceById,
+    getDeviceHealth,
+    getDeviceSyncHistory,
     createPendingDevice,
     pairDevice,
     updateDevice,
@@ -44,6 +46,12 @@ router.get("/status", getDeviceStatus);
 
 // Get Device By ID
 router.get("/:deviceId", getDeviceById);
+
+// Get Device Health
+router.get("/:deviceId/health", getDeviceHealth);
+
+// Get Device Sync History
+router.get("/:deviceId/sync-history", getDeviceSyncHistory);
 
 // Create Device (admin, website) — returns a pairing code, not a token.
 // Replaces the old self-service POST /register, which let anyone who knew

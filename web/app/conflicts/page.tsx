@@ -62,6 +62,14 @@ export default function ConflictsPage() {
     } catch {} finally { setResolving(false) }
   }
 
+  const handleMarkStatus = async (id: string, status: 'UNDER_REVIEW' | 'REJECTED') => {
+    await apiFetch(`/conflicts/${id}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ status })
+    }).catch(() => {})
+    fetchConflicts()
+  }
+
   const handleDismiss = async (id: string) => {
     if (!confirm('Dismiss this conflict?')) return
     await apiFetch(`/conflicts/${id}`, { method: 'DELETE' }).catch(() => {})
@@ -86,7 +94,7 @@ export default function ConflictsPage() {
         </div>
 
         <div className="flex gap-2 mb-4">
-          {['PENDING', 'RESOLVED'].map((f) => (
+          {['PENDING', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED'].map((f) => (
             <button key={f} onClick={() => setFilters(p => ({ ...p, status: f }))}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${filters.status === f ? 'bg-[#1E3A5F] text-[#5DA9FF]' : 'text-[#90A6BD] hover:text-white'}`}>
               {f}
@@ -142,7 +150,15 @@ export default function ConflictsPage() {
                       {c.status === 'PENDING' && (
                         <div className="flex gap-3">
                           <button onClick={() => setSelected(c)} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Resolve</button>
-                          <button onClick={() => handleDismiss(c.conflict_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Dismiss</button>
+                          <button onClick={() => handleMarkStatus(c.conflict_id, 'UNDER_REVIEW')} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Under Review</button>
+                          <button onClick={() => handleMarkStatus(c.conflict_id, 'REJECTED')} className="text-[#F87171] text-sm hover:text-white transition-colors">Reject</button>
+                          <button onClick={() => handleDismiss(c.conflict_id)} className="text-[#90A6BD] text-sm hover:text-white transition-colors">Dismiss</button>
+                        </div>
+                      )}
+                      {c.status === 'UNDER_REVIEW' && (
+                        <div className="flex gap-3">
+                          <button onClick={() => setSelected(c)} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Resolve</button>
+                          <button onClick={() => handleMarkStatus(c.conflict_id, 'REJECTED')} className="text-[#F87171] text-sm hover:text-white transition-colors">Reject</button>
                         </div>
                       )}
                     </td>

@@ -61,6 +61,65 @@ export const getDeviceById = async (
 };
 
 /**
+ * Get Device Health — previously documented in an early contract draft but
+ * never built; device_sync_log has been recording this data all along.
+ */
+export const getDeviceHealth = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const deviceId = req.params.deviceId as string;
+        const health = await DeviceService.getDeviceHealth(deviceId);
+
+        res.status(200).json({
+            success: true,
+            data: health
+        });
+
+    } catch {
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch device health"
+        });
+
+    }
+
+};
+
+/**
+ * Get Device Sync History
+ */
+export const getDeviceSyncHistory = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const deviceId = req.params.deviceId as string;
+        const history = await DeviceService.getDeviceSyncHistory(deviceId);
+
+        res.status(200).json({
+            success: true,
+            data: history
+        });
+
+    } catch {
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch device sync history"
+        });
+
+    }
+
+};
+
+/**
  * Create Pending Device (admin, website) — returns a pairing code, not a
  * device_token. The token is only issued once the physical device redeems
  * that code via POST /devices/pair.

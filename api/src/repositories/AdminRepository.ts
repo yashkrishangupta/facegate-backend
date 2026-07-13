@@ -222,3 +222,42 @@ export const deactivateAdmin = async (adminId: string) => {
     );
     return { success: (result.rowCount ?? 0) > 0 };
 };
+
+const slugifyUsername = (value: string) => value.toLowerCase().trim().replace(/[^a-z]+/g, "");
+
+const generateAdminUsername = async (firstName: string, lastName: string): Promise<string> => {
+    const base = `${slugifyUsername(firstName)}.${slugifyUsername(lastName)}`;
+    const existing = await pool.query(
+        `SELECT username FROM admin_user WHERE username = $1 OR username LIKE $2`,
+        [base, `${base}%`]
+    );
+    if (existing.rows.length === 0) return base;
+    const taken = new Set(existing.rows.map((r: any) => r.username as string));
+    if (!taken.has(base)) return base;
+    let n = 2;
+    while (taken.has(`${base}${n}`)) n++;
+    return `${base}${n}`;
+};
+
+/**
+ * Create a plain admin account directly — SUPER_ADMIN only. Previously the
+ * only way an admin_user row could be created was via Faculty (always
+ * role='FACULTY') or the one-time SQL bootstrap script; there was no path
+ * to a standalone ADMIN/SUPER_ADMIN/VIEWER account at all.
+ */
+export const createAdmin = async (data: any) => {
+    const { employee_id, first_name, last_name, email, phone, role, password } = data;
+
+    const username = await generateAdminUsername(first_name, last_name);
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const result = await pool.query(
+        `INSERT INTO admin_user
+            (employee_id, username, first_name, last_name, email, phone, password_hash, role)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+         RETURNING admin_id, employee_id, username, first_name, last_name, email, role, account_status`,
+        [employee_id, username, first_name, last_name, email, phone ?? null, passwordHash, role]
+    );
+
+    return result.rows[0];
+};

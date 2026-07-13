@@ -105,6 +105,40 @@ export const getTimetableByFaculty = async (facultyId: string) => {
     return result.rows;
 };
 
+/**
+ * Finds any OTHER batch's period that overlaps this room or faculty member
+ * at the same day/time. The existing DB constraint only catches a clash for
+ * the *same* batch — this catches the room/faculty case, which nothing else
+ * guards against.
+ */
+export const findSchedulingClash = async (params: {
+    room_id: string;
+    faculty_id: string;
+    day_of_week: string;
+    start_time: string;
+    end_time: string;
+    exclude_timetable_id?: string;
+}) => {
+    const { room_id, faculty_id, day_of_week, start_time, end_time, exclude_timetable_id } = params;
+
+    const result = await pool.query(
+        `SELECT t.timetable_id, t.room_id, t.faculty_id, b.batch_code,
+                CASE WHEN t.room_id = $1 THEN 'room' ELSE 'faculty' END AS clash_type
+         FROM timetable t
+         JOIN batch b ON b.batch_id = t.batch_id
+         WHERE t.is_active = TRUE
+           AND t.day_of_week = $3
+           AND (t.room_id = $1 OR t.faculty_id = $2)
+           AND t.start_time < $5
+           AND t.end_time > $4
+           AND ($6::uuid IS NULL OR t.timetable_id != $6)
+         LIMIT 1`,
+        [room_id, faculty_id, day_of_week, start_time, end_time, exclude_timetable_id ?? null]
+    );
+
+    return result.rows[0] || null;
+};
+
 export const createTimetable = async (timetableData: any) => {
 
     const {

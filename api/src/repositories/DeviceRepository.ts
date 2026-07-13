@@ -52,6 +52,54 @@ export const getDeviceById = async (deviceId: string) => {
  * Backs the architecture's "guard against two devices assigned the same
  * room" decision — checked before create AND before a reassignment.
  */
+/**
+ * Live health snapshot — device_sync_log has been written to on every
+ * sync/pair call all along; this just reads it back.
+ */
+export const getDeviceHealth = async (deviceId: string) => {
+    const deviceResult = await pool.query(
+        `SELECT device_status, network_status, battery_percentage,
+                storage_available_mb, last_heartbeat, last_sync
+         FROM device WHERE device_id = $1`,
+        [deviceId]
+    );
+
+    const lastSyncResult = await pool.query(
+        `SELECT sync_status, sync_type, sync_end_time, error_message
+         FROM device_sync_log
+         WHERE device_id = $1
+         ORDER BY sync_start_time DESC
+         LIMIT 1`,
+        [deviceId]
+    );
+
+    const device = deviceResult.rows[0];
+    const lastSync = lastSyncResult.rows[0];
+
+    return {
+        batteryLevel: device?.battery_percentage ?? null,
+        networkStatus: device?.network_status ?? "UNKNOWN",
+        storageAvailable: device?.storage_available_mb ?? null,
+        lastSeen: device?.last_heartbeat ?? null,
+        syncStatus: lastSync?.sync_status ?? "NEVER_SYNCED",
+        lastSyncType: lastSync?.sync_type ?? null,
+        lastError: lastSync?.error_message ?? null
+    };
+};
+
+export const getDeviceSyncHistory = async (deviceId: string) => {
+    const result = await pool.query(
+        `SELECT sync_log_id, sync_type, sync_status, sync_start_time, sync_end_time,
+                records_uploaded, records_downloaded, failed_records, error_message
+         FROM device_sync_log
+         WHERE device_id = $1
+         ORDER BY sync_start_time DESC
+         LIMIT 100`,
+        [deviceId]
+    );
+    return result.rows;
+};
+
 export const roomHasClaimingDevice = async (
     roomId: string,
     excludingDeviceId?: string

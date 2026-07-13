@@ -1,6 +1,50 @@
 import { Request, Response } from "express";
 import * as ReportService from "../services/ReportService";
 
+const toCsv = (rows: any[]): string => {
+    if (rows.length === 0) return "date,student_name,roll_number,batch_code,subject_code,subject_name,faculty_name,status,attendance_mode\n";
+    const headers = Object.keys(rows[0]);
+    const escape = (v: any) => {
+        const s = v === null || v === undefined ? "" : String(v);
+        return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const lines = [headers.join(",")];
+    for (const row of rows) {
+        lines.push(headers.map(h => escape(row[h])).join(","));
+    }
+    return lines.join("\n");
+};
+
+/**
+ * GET /reports/export?reportType=student|batch|subject&id=&from=&to=
+ * Referenced by the frontend since it was first built; never had a route.
+ */
+export const exportReport = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const { reportType, id, from, to } = req.query as Record<string, string>;
+        const rows = await ReportService.exportReport(reportType as any, id, from, to);
+        const csv = toCsv(rows);
+
+        res.setHeader("Content-Type", "text/csv");
+        res.setHeader("Content-Disposition", `attachment; filename="facegate-${reportType}-report.csv"`);
+        res.status(200).send(csv);
+
+    } catch (err: any) {
+
+        res.status(400).json({
+            success: false,
+            message: err?.message || "Failed to export report"
+        });
+
+    }
+
+};
+
 /**
  * Daily Report
  */
@@ -71,6 +115,14 @@ export const getFacultyReport = async (
     try {
 
         const facultyId = req.params.facultyId as string;
+
+        // A FACULTY-role caller can only ever pull their own report — this
+        // is the one place a faculty could otherwise directly request
+        // another faculty member's data just by changing the URL param.
+        if (req.user?.role === "FACULTY" && req.user.facultyId !== facultyId) {
+            res.status(403).json({ success: false, message: "You can only view your own report" });
+            return;
+        }
 
         const report =
             await ReportService.getFacultyReport(facultyId);

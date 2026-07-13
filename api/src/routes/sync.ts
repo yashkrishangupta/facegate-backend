@@ -4,6 +4,7 @@ import {
     fullSync,
     incrementalSync,
     uploadAttendance,
+    uploadEmbedding,
     getSyncStatus,
     retrySync
 } from "../controllers/SyncController";
@@ -23,6 +24,9 @@ router.get("/incremental", incrementalSync);
 
 // Upload Attendance
 router.post("/attendance", uploadAttendance);
+
+// Upload Face Embedding (device-side enrollment sync-up)
+router.post("/embeddings", uploadEmbedding);
 
 // Sync Status
 router.get("/status", getSyncStatus);

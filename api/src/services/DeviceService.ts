@@ -3,6 +3,14 @@ import * as DeviceRepository from "../repositories/DeviceRepository";
 /**
  * Get All Devices
  */
+export const getDeviceHealth = async (deviceId: string) => {
+    return await DeviceRepository.getDeviceHealth(deviceId);
+};
+
+export const getDeviceSyncHistory = async (deviceId: string) => {
+    return await DeviceRepository.getDeviceSyncHistory(deviceId);
+};
+
 export const getAllDevices = async () => {
     return await DeviceRepository.getAllDevices();
 };

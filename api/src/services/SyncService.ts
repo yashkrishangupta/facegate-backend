@@ -19,3 +19,9 @@ export const getSyncStatus = async (deviceId: string) => {
 export const retrySync = async (deviceId: string, roomId: string) => {
     return await SyncRepository.retrySync(deviceId, roomId);
 };
+export const uploadEmbedding = async (deviceId: string, embeddingData: any) => {
+    if (!embeddingData?.student_id || !embeddingData?.embedding_data || !embeddingData?.model_name) {
+        throw new Error("student_id, embedding_data, and model_name are required");
+    }
+    return await SyncRepository.uploadEmbedding(deviceId, embeddingData);
+};

@@ -5,15 +5,17 @@ import {
     getStudentReport,
     getFacultyReport,
     getDepartmentReport,
-    getSummaryReport
+    getSummaryReport,
+    exportReport
 } from "../controllers/ReportController";
 import { requireAuth } from "../middleware/auth";
 
 const router = Router();
 
-// NOTE: open to any authenticated role, including FACULTY — per-faculty
-// row scoping ("only batches I teach") is NOT yet enforced inside
-// ReportRepository's queries. Flagging as follow-up, not silently skipping.
+// Open to any authenticated role, including FACULTY. A FACULTY caller is
+// blocked from requesting another faculty member's report (checked in the
+// controller); the daily/summary/department aggregates stay visible to
+// every role (no individual student PII tied to a specific other faculty).
 router.use(requireAuth);
 
 /**
@@ -25,6 +27,9 @@ router.get("/summary", getSummaryReport);
 
 // Daily Attendance Report
 router.get("/daily", getDailyReport);
+
+// Export (CSV) — referenced by the frontend since it was first built, no route existed until now
+router.get("/export", exportReport);
 
 // Student Report
 router.get("/student/:studentId", getStudentReport);

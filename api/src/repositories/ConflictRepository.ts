@@ -50,6 +50,7 @@ export const getFilteredConflicts = async (filters: {
     room_id?: string;
     from_date?: string;
     to_date?: string;
+    faculty_id?: string | null;
 }) => {
     const conditions = ["c.is_active = TRUE"];
     const values: any[] = [];
@@ -60,6 +61,16 @@ export const getFilteredConflicts = async (filters: {
     if (filters.room_id) { values.push(filters.room_id); conditions.push(`dv.room_id = $${values.length}`); }
     if (filters.from_date) { values.push(filters.from_date); conditions.push(`c.created_at >= $${values.length}`); }
     if (filters.to_date) { values.push(filters.to_date); conditions.push(`c.created_at <= $${values.length}`); }
+    // FACULTY-role callers only ever see conflicts tied to sessions they teach.
+    if (filters.faculty_id) {
+        values.push(filters.faculty_id);
+        conditions.push(`EXISTS (
+            SELECT 1 FROM attendance_session ases
+            JOIN timetable t ON t.timetable_id = ases.timetable_id
+            WHERE ases.attendance_session_id = c.attendance_session_id
+              AND t.faculty_id = $${values.length}
+        )`);
+    }
 
     const result = await pool.query(
         `${SELECT_CONFLICT} WHERE ${conditions.join(" AND ")} ORDER BY c.created_at DESC`,
@@ -140,4 +151,29 @@ export const deleteConflict = async (conflictId: string) => {
         [conflictId]
     );
     return { success: result.rowCount !== null && result.rowCount > 0 };
+};
+
+/**
+ * Direct status transition — UNDER_REVIEW or REJECTED, previously
+ * unreachable through the UI (only PENDING and RESOLVED, via
+ * resolveConflict above, were ever set anywhere).
+ */
+export const updateConflictStatus = async (
+    conflictId: string,
+    status: string,
+    resolvedBy?: string | null,
+    notes?: string
+) => {
+    const result = await pool.query(
+        `UPDATE conflict
+         SET conflict_status = $2,
+             resolved_by = CASE WHEN $2 = 'REJECTED' THEN $3 ELSE resolved_by END,
+             resolution_notes = COALESCE($4, resolution_notes),
+             resolved_at = CASE WHEN $2 IN ('RESOLVED', 'REJECTED') THEN CURRENT_TIMESTAMP ELSE resolved_at END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE conflict_id = $1
+         RETURNING *`,
+        [conflictId, status, resolvedBy ?? null, notes ?? null]
+    );
+    return result.rows[0] || null;
 };

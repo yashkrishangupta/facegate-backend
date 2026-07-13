@@ -49,3 +49,17 @@ export const deleteConflict = async (
 ) => {
     return await ConflictRepository.deleteConflict(conflictId);
 };
+export const updateConflictStatus = async (
+    conflictId: string,
+    status: string,
+    resolvedBy?: string | null,
+    notes?: string
+) => {
+    const valid = ["PENDING", "UNDER_REVIEW", "RESOLVED", "REJECTED"];
+    if (!valid.includes(status)) {
+        throw new Error(`status must be one of: ${valid.join(", ")}`);
+    }
+    const conflict = await ConflictRepository.updateConflictStatus(conflictId, status, resolvedBy, notes);
+    if (!conflict) throw new Error("Conflict not found");
+    return conflict;
+};

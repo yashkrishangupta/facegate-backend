@@ -55,6 +55,7 @@ export default function Home() {
     { title: "Conflicts", desc: "Resolve face recognition conflicts", href: "/conflicts", color: "#FB923C" },
     { title: "Change Log", desc: "Audit trail of admin actions", href: "/change-log", color: "#90A6BD", adminOnly: true },
     { title: "Master Data", desc: "Departments, programs, batches, subjects, faculty, calendar", href: "/master-data", color: "#5DA9FF", adminOnly: true },
+    { title: "Notifications", desc: "System alerts and announcements", href: "/notifications", color: "#F59E0B" },
   ]
 
   return (

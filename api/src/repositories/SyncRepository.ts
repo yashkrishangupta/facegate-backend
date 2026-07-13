@@ -90,10 +90,58 @@ const pullForRoom = async (roomId: string, since?: string) => {
         holidayParams
     );
 
+    // Face embeddings — students belonging to this room's batches, so a
+    // student enrolled at any device is recognizable at every room's
+    // device, not just the one that captured them (architecture doc's
+    // original intent — this previously wasn't wired into the sync
+    // payload at all).
+    const embeddingSinceClause = since ? "AND fe.updated_at > $2" : "";
+    const embeddingParams = since ? [roomId, since] : [roomId];
+
+    const embeddings = await pool.query(
+        `SELECT fe.student_id, fe.embedding_data, fe.embedding_version,
+                fe.model_name, fe.confidence_threshold, fe.updated_at
+         FROM face_embedding fe
+         WHERE fe.is_active = TRUE AND fe.embedding_status = 'ACTIVE'
+           AND fe.student_id IN (
+               SELECT DISTINCT s.student_id FROM student s
+               WHERE s.batch_id IN (
+                   SELECT DISTINCT batch_id FROM timetable
+                   WHERE room_id = $1 AND is_active = TRUE
+               )
+           )
+           ${embeddingSinceClause}`,
+        embeddingParams
+    );
+
+    // Attendance-down — a manual correction made on the website (PUT
+    // /attendance/:id) previously never reached any device. Scoped to this
+    // room's sessions; full sync caps the lookback window at 30 days so it
+    // doesn't dump the entire attendance history on every fresh pairing.
+    // Android side does most-recent-wins on `updated_at` against its local
+    // copy — see plan.md §6.2 for the agreed merge rule.
+    const attendanceSinceClause = since ? "AND a.updated_at > $2" : "AND a.updated_at > $2";
+    const attendanceParams = since
+        ? [roomId, since]
+        : [roomId, new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()];
+
+    const attendanceDown = await pool.query(
+        `SELECT a.attendance_id, t.timetable_id, ases.session_date, a.student_id,
+                a.attendance_status AS status, a.attendance_mode,
+                a.attendance_time, a.updated_at
+         FROM attendance a
+         JOIN attendance_session ases ON ases.attendance_session_id = a.attendance_session_id
+         JOIN timetable t ON t.timetable_id = ases.timetable_id
+         WHERE t.room_id = $1 AND a.is_active = TRUE ${attendanceSinceClause}`,
+        attendanceParams
+    );
+
     return {
         timetable: timetable.rows,
         students: students.rows,
-        holidays: holidays.rows
+        holidays: holidays.rows,
+        embeddings: embeddings.rows,
+        attendanceUpdates: attendanceDown.rows
     };
 };
 
@@ -105,7 +153,8 @@ export const fullSync = async (deviceId: string, roomId: string) => {
         const data = await pullForRoom(roomId);
 
         await logSync(deviceId, "FULL", startedAt, {
-            downloaded: data.timetable.length + data.students.length + data.holidays.length,
+            downloaded: data.timetable.length + data.students.length + data.holidays.length
+                + data.embeddings.length + data.attendanceUpdates.length,
             uploaded: 0,
             failed: 0
         });
@@ -126,7 +175,8 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
         const data = await pullForRoom(roomId, since);
 
         await logSync(deviceId, "INCREMENTAL", startedAt, {
-            downloaded: data.timetable.length + data.students.length + data.holidays.length,
+            downloaded: data.timetable.length + data.students.length + data.holidays.length
+                + data.embeddings.length + data.attendanceUpdates.length,
             uploaded: 0,
             failed: 0
         });
@@ -135,9 +185,13 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
             updatedTimetable: data.timetable.length,
             updatedStudents: data.students.length,
             updatedHolidays: data.holidays.length,
+            updatedEmbeddings: data.embeddings.length,
+            updatedAttendance: data.attendanceUpdates.length,
             timetable: data.timetable,
             students: data.students,
             holidays: data.holidays,
+            embeddings: data.embeddings,
+            attendanceUpdates: data.attendanceUpdates,
             lastSync: new Date().toISOString()
         };
 
@@ -281,4 +335,47 @@ export const getSyncStatus = async (deviceId: string) => {
 export const retrySync = async (deviceId: string, roomId: string) => {
     const result = await incrementalSync(deviceId, roomId);
     return { retried: true, status: "SUCCESS", ...result };
+};
+
+/**
+ * Device push — a device that just captured a new embedding (on-device
+ * enrollment, Flow B from the architecture doc, or a re-capture) uploads it
+ * here. Upserts on student_id (uq_student_embedding) so a re-enrollment
+ * naturally replaces the old vector rather than erroring or duplicating.
+ */
+export const uploadEmbedding = async (deviceId: string, embeddingData: any) => {
+    const { student_id, embedding_data, embedding_version, model_name, confidence_threshold } = embeddingData;
+
+    const startedAt = new Date();
+
+    try {
+        await pool.query(
+            `INSERT INTO face_embedding
+                (student_id, embedding_data, embedding_version, model_name, confidence_threshold)
+             VALUES ($1, $2, $3, $4, $5)
+             ON CONFLICT ON CONSTRAINT uq_student_embedding
+             DO UPDATE SET
+                embedding_data = EXCLUDED.embedding_data,
+                embedding_version = EXCLUDED.embedding_version,
+                model_name = EXCLUDED.model_name,
+                confidence_threshold = EXCLUDED.confidence_threshold,
+                embedding_status = 'ACTIVE',
+                last_updated = CURRENT_TIMESTAMP,
+                updated_at = CURRENT_TIMESTAMP`,
+            [
+                student_id,
+                JSON.stringify(embedding_data),
+                embedding_version || "v1.0",
+                model_name,
+                confidence_threshold ?? 75.00
+            ]
+        );
+
+        await logSync(deviceId, "FACE_SYNC", startedAt, { downloaded: 0, uploaded: 1, failed: 0 });
+        return { success: true };
+
+    } catch (err: any) {
+        await logSync(deviceId, "FACE_SYNC", startedAt, { downloaded: 0, uploaded: 0, failed: 1, error: err.message });
+        throw err;
+    }
 };

@@ -262,3 +262,34 @@ export const deactivateAdmin = async (
     }
 
 };
+
+/**
+ * Create Admin — SUPER_ADMIN only, direct creation of a plain ADMIN/
+ * SUPER_ADMIN/VIEWER account (FACULTY accounts go through POST /faculty
+ * instead, since those also need a linked teaching record).
+ */
+export const createAdmin = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+
+    try {
+
+        const admin = await AdminService.createAdmin(req.body);
+
+        res.status(201).json({
+            success: true,
+            message: `Admin account created. Username: ${admin.username}`,
+            data: admin
+        });
+
+    } catch (err: any) {
+
+        res.status(400).json({
+            success: false,
+            message: err?.message || "Failed to create admin"
+        });
+
+    }
+
+};

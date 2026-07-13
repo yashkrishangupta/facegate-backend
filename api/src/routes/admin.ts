@@ -7,6 +7,7 @@ import {
     updateProfile,
     changePassword,
     updateSecurity,
+    createAdmin,
     getAllAdmins,
     deactivateAdmin
 } from "../controllers/AdminController";
@@ -36,6 +37,9 @@ router.put("/change-password", changePassword);
 
 // Get All Admins — ADMIN and SUPER_ADMIN only
 router.get("/", requireAdmin, getAllAdmins);
+
+// Create Admin — SUPER_ADMIN only, direct account creation (not via Faculty)
+router.post("/", requireSuperAdmin, createAdmin);
 
 // Security settings (role / account_status / reset another user's password)
 // — SUPER_ADMIN only. Deliberately separate from /profile so an ADMIN has

@@ -45,3 +45,18 @@ export const getAdminById = async (adminId: string) => {
 export const deactivateAdmin = async (adminId: string) => {
     return await AdminRepository.deactivateAdmin(adminId);
 };
+
+export const createAdmin = async (data: any) => {
+    const required = ["employee_id", "first_name", "last_name", "email", "role", "password"];
+    for (const field of required) {
+        if (!data[field]) throw new Error(`${field} is required`);
+    }
+    const validRoles = ["SUPER_ADMIN", "ADMIN", "VIEWER"];
+    if (!validRoles.includes(data.role)) {
+        // FACULTY accounts must go through /faculty, which also creates the
+        // teaching record — creating one here would leave it orphaned.
+        throw new Error(`role must be one of: ${validRoles.join(", ")} (use /faculty for FACULTY accounts)`);
+    }
+    if (String(data.password).length < 8) throw new Error("Password must be at least 8 characters");
+    return await AdminRepository.createAdmin(data);
+};
