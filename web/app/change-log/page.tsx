@@ -17,7 +17,7 @@ interface ChangeEntry {
 }
 
 const ACTIONS = ['CREATE', 'UPDATE', 'DELETE', 'LOGIN', 'LOGOUT', 'SYNC', 'RESOLVE', 'EXPORT']
-const ENTITIES = ['room', 'device', 'faculty', 'department', 'subject', 'admin_user', 'student', 'timetable', 'holiday']
+const ENTITIES = ['room', 'device', 'faculty', 'department', 'subject', 'admin_user', 'student', 'timetable', 'timetable_session', 'holiday']
 
 const actionColor: Record<string, string> = {
   CREATE: 'bg-[#14532D] text-[#4ADE80]',
@@ -74,19 +74,47 @@ export default function ChangeLogPage() {
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center text-[#90A6BD]">No changes logged yet</div>
         ) : (
           <div className="flex flex-col gap-2">
-            {items.map((c) => (
-              <div key={c.change_log_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-xl p-4 flex items-center justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${actionColor[c.action] || 'bg-[#2F4E73] text-[#90A6BD]'}`}>{c.action}</span>
-                    <span className="text-white text-sm font-mono">{c.entity_name}</span>
+            {items.map((c) => {
+              // Device-pushed events (POST /devices/change-log) have no
+              // admin_id — that JOIN comes back null — but carry a
+              // human-readable description and the device's id inside
+              // new_values (there's no dedicated column for either on
+              // change_log). Previously this data was written to the DB
+              // by the device-push endpoint but never surfaced here at
+              // all — the list only ever showed the action badge and
+              // entity_name, with every null-admin row unhelpfully
+              // labeled "System" regardless of source.
+              let description: string | null = null
+              let deviceId: string | null = null
+              try {
+                const nv = typeof c.new_values === 'string' ? JSON.parse(c.new_values) : c.new_values
+                description = nv?.description ?? null
+                deviceId = nv?.device_id ?? null
+              } catch { /* old_values/new_values not JSON-parseable — skip */ }
+
+              const attribution = c.first_name
+                ? `${c.first_name} ${c.last_name} (${c.username})`
+                : deviceId
+                  ? `Device ${deviceId.slice(0, 8)}`
+                  : 'System'
+
+              return (
+                <div key={c.change_log_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-xl p-4 flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${actionColor[c.action] || 'bg-[#2F4E73] text-[#90A6BD]'}`}>{c.action}</span>
+                      <span className="text-white text-sm font-mono">{c.entity_name}</span>
+                    </div>
+                    {description && (
+                      <p className="text-[#C4D3E5] text-xs mt-1">{description}</p>
+                    )}
+                    <p className="text-[#90A6BD] text-xs mt-1">
+                      {attribution} · {new Date(c.action_timestamp).toLocaleString()}
+                    </p>
                   </div>
-                  <p className="text-[#90A6BD] text-xs mt-1">
-                    {c.first_name ? `${c.first_name} ${c.last_name} (${c.username})` : 'System'} · {new Date(c.action_timestamp).toLocaleString()}
-                  </p>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
