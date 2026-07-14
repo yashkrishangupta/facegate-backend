@@ -6,7 +6,35 @@ import pool from "../config/database";
  * conflicts and notifications — powers the admin dashboard home screen.
  */
 
-export const getDashboardSummary = async () => {
+/**
+ * facultyId scopes todayClasses/attendanceToday/attendancePercentage/
+ * pendingConflicts/resolvedConflicts/totalStudents to a FACULTY caller's
+ * own sessions — the same figures scoped in ReportRepository.
+ * totalFaculty/totalDepartments/activeDevices/offlineDevices/
+ * unreadNotifications/lastSync stay institution-wide.
+ */
+export const getDashboardSummary = async (facultyId?: string | null) => {
+
+    const classesFacultyWhere = facultyId ? `AND t.faculty_id = $1` : "";
+    const classesParams = facultyId ? [facultyId] : [];
+
+    const attFacultyJoin = facultyId
+        ? `JOIN attendance_session ases ON ases.attendance_session_id = attendance.attendance_session_id
+           JOIN timetable t2 ON t2.timetable_id = ases.timetable_id`
+        : "";
+    const attFacultyWhere = facultyId ? `AND t2.faculty_id = $1` : "";
+
+    const conflictFacultyJoin = facultyId
+        ? `JOIN attendance_session ases2 ON ases2.attendance_session_id = conflict.attendance_session_id
+           JOIN timetable t3 ON t3.timetable_id = ases2.timetable_id`
+        : "";
+    const conflictFacultyWhere = facultyId ? `AND t3.faculty_id = $1` : "";
+
+    const studentCountQuery = facultyId
+        ? `SELECT COUNT(DISTINCT s.student_id) FROM student s
+           JOIN timetable t4 ON t4.batch_id = s.batch_id
+           WHERE s.is_active = TRUE AND t4.faculty_id = $1`
+        : `SELECT COUNT(*) FROM student WHERE is_active = TRUE`;
 
     const [
         students,
@@ -19,7 +47,7 @@ export const getDashboardSummary = async () => {
         notifications,
         lastSync
     ] = await Promise.all([
-        pool.query(`SELECT COUNT(*) FROM student WHERE is_active = TRUE`),
+        pool.query(studentCountQuery, classesParams),
         pool.query(`SELECT COUNT(*) FROM faculty WHERE is_active = TRUE`),
         pool.query(`SELECT COUNT(*) FROM department WHERE is_active = TRUE`),
         pool.query(
@@ -31,20 +59,27 @@ export const getDashboardSummary = async () => {
         pool.query(
             `SELECT COUNT(*) FROM timetable t
              WHERE t.is_active = TRUE
-               AND UPPER(t.day_of_week) = UPPER(TO_CHAR(CURRENT_DATE, 'FMDay'))`
+               AND UPPER(t.day_of_week) = UPPER(TO_CHAR(CURRENT_DATE, 'FMDay'))
+               ${classesFacultyWhere}`,
+            classesParams
         ),
         pool.query(
             `SELECT
-                COUNT(*) FILTER (WHERE attendance_status = 'PRESENT') AS present,
+                COUNT(*) FILTER (WHERE attendance.attendance_status = 'PRESENT') AS present,
                 COUNT(*) AS total
              FROM attendance
-             WHERE is_active = TRUE AND attendance_time::date = CURRENT_DATE`
+             ${attFacultyJoin}
+             WHERE attendance.is_active = TRUE AND attendance.attendance_time::date = CURRENT_DATE ${attFacultyWhere}`,
+            classesParams
         ),
         pool.query(
             `SELECT
-                COUNT(*) FILTER (WHERE conflict_status = 'PENDING') AS pending,
-                COUNT(*) FILTER (WHERE conflict_status = 'RESOLVED') AS resolved
-             FROM conflict WHERE is_active = TRUE`
+                COUNT(*) FILTER (WHERE conflict.conflict_status = 'PENDING') AS pending,
+                COUNT(*) FILTER (WHERE conflict.conflict_status = 'RESOLVED') AS resolved
+             FROM conflict
+             ${conflictFacultyJoin}
+             WHERE conflict.is_active = TRUE ${conflictFacultyWhere}`,
+            classesParams
         ),
         pool.query(
             `SELECT COUNT(*) FROM notification WHERE is_read = FALSE AND is_active = TRUE`
@@ -76,7 +111,16 @@ export const getDashboardSummary = async () => {
     };
 };
 
-export const getRecentAttendance = async () => {
+/**
+ * facultyId scopes this to sessions the caller teaches — previously this
+ * showed every faculty member's attendance activity (student names
+ * included) to any authenticated FACULTY account, which is exactly the
+ * individual-student-data-tied-to-another-faculty-member's-class leak that
+ * /attendance/session/:id, /attendance/student/:id, and /conflicts were
+ * already protected against.
+ */
+export const getRecentAttendance = async (facultyId?: string | null) => {
+    const facultyWhere = facultyId ? `AND t.faculty_id = $1` : "";
     const result = await pool.query(
         `SELECT
             a.attendance_id,
@@ -91,14 +135,26 @@ export const getRecentAttendance = async () => {
          JOIN timetable t ON t.timetable_id = ases.timetable_id
          JOIN subject sub ON sub.subject_id = t.subject_id
          JOIN room r ON r.room_id = t.room_id
-         WHERE a.is_active = TRUE
+         WHERE a.is_active = TRUE ${facultyWhere}
          ORDER BY a.attendance_time DESC
-         LIMIT 10`
+         LIMIT 10`,
+        facultyId ? [facultyId] : []
     );
     return result.rows;
 };
 
-export const getRecentConflicts = async () => {
+/**
+ * facultyId scopes this the same way — see getRecentAttendance. A
+ * conflict with no resolvable session (attendance_session_id NULL) is
+ * excluded for a FACULTY caller rather than shown, since ownership can't
+ * be determined; ADMIN+/VIEWER still see everything via the unscoped path.
+ */
+export const getRecentConflicts = async (facultyId?: string | null) => {
+    const facultyJoin = facultyId
+        ? `JOIN attendance_session ases ON ases.attendance_session_id = c.attendance_session_id
+           JOIN timetable t ON t.timetable_id = ases.timetable_id`
+        : "";
+    const facultyWhere = facultyId ? `AND t.faculty_id = $1` : "";
     const result = await pool.query(
         `SELECT
             c.conflict_id,
@@ -107,9 +163,11 @@ export const getRecentConflicts = async () => {
             c.conflict_status AS status
          FROM conflict c
          LEFT JOIN student s ON s.student_id = c.student_id
-         WHERE c.is_active = TRUE
+         ${facultyJoin}
+         WHERE c.is_active = TRUE ${facultyWhere}
          ORDER BY c.created_at DESC
-         LIMIT 10`
+         LIMIT 10`,
+        facultyId ? [facultyId] : []
     );
     return result.rows;
 };

@@ -19,8 +19,8 @@ export const exportReport = async (
 /**
  * Daily Report
  */
-export const getDailyReport = async () => {
-    return await ReportRepository.getDailyReport();
+export const getDailyReport = async (date?: string, facultyId?: string | null) => {
+    return await ReportRepository.getDailyReport(date, facultyId);
 };
 
 /**
@@ -53,6 +53,6 @@ export const getDepartmentReport = async (
 /**
  * Summary Report
  */
-export const getSummaryReport = async () => {
-    return await ReportRepository.getSummaryReport();
+export const getSummaryReport = async (facultyId?: string | null) => {
+    return await ReportRepository.getSummaryReport(facultyId);
 };

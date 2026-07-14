@@ -1112,7 +1112,7 @@ CREATE TABLE conflict (
 
     attendance_id UUID,
 
-    attendance_session_id UUID NOT NULL,
+    attendance_session_id UUID,
 
     student_id UUID,
 

@@ -52,18 +52,38 @@ export const getExportRows = async (
     return result.rows;
 };
 
-export const getDailyReport = async (date?: string) => {
+/**
+ * facultyId, when provided (a FACULTY-role caller), scopes the count to
+ * attendance rows tied to sessions that faculty member teaches — the same
+ * row-scoping already applied to /attendance, /conflicts, and
+ * /reports/faculty/:id, previously missing here (see API_CONTRACT.md §1's
+ * caveat, now closed).
+ */
+export const getDailyReport = async (date?: string, facultyId?: string | null) => {
 
     const targetDate = date ?? new Date().toISOString().slice(0, 10);
 
+    const conditions = ["a.is_active = TRUE", "a.attendance_time::date = $1"];
+    const values: any[] = [targetDate];
+
+    const facultyJoin = facultyId
+        ? `JOIN attendance_session ases ON ases.attendance_session_id = a.attendance_session_id
+           JOIN timetable t ON t.timetable_id = ases.timetable_id`
+        : "";
+    if (facultyId) {
+        values.push(facultyId);
+        conditions.push(`t.faculty_id = $${values.length}`);
+    }
+
     const result = await pool.query(
         `SELECT
-            COUNT(*) FILTER (WHERE attendance_status = 'PRESENT') AS present,
-            COUNT(*) FILTER (WHERE attendance_status = 'ABSENT') AS absent,
+            COUNT(*) FILTER (WHERE a.attendance_status = 'PRESENT') AS present,
+            COUNT(*) FILTER (WHERE a.attendance_status = 'ABSENT') AS absent,
             COUNT(*) AS total
-         FROM attendance
-         WHERE is_active = TRUE AND attendance_time::date = $1`,
-        [targetDate]
+         FROM attendance a
+         ${facultyJoin}
+         WHERE ${conditions.join(" AND ")}`,
+        values
     );
 
     const row = result.rows[0];
@@ -207,19 +227,54 @@ export const getDepartmentReport = async (departmentId: string) => {
     };
 };
 
-export const getSummaryReport = async () => {
+/**
+ * facultyId scopes totalStudents/totalAttendanceRecords/averageAttendance/
+ * pendingConflicts to this faculty member's own sessions — the figures
+ * that would otherwise expose another faculty member's course data.
+ * totalFaculty and activeDevices stay institution-wide even for a FACULTY
+ * caller: an org-wide headcount/device count isn't another faculty
+ * member's individual data the way a student list or conflict tied to
+ * their specific class is.
+ */
+export const getSummaryReport = async (facultyId?: string | null) => {
+
+    const facultyAttendanceJoin = facultyId
+        ? `JOIN attendance_session ases ON ases.attendance_session_id = attendance.attendance_session_id
+           JOIN timetable t ON t.timetable_id = ases.timetable_id`
+        : "";
+    const facultyAttendanceWhere = facultyId ? `AND t.faculty_id = $1` : "";
+
+    const facultyConflictJoin = facultyId
+        ? `JOIN attendance_session ases2 ON ases2.attendance_session_id = conflict.attendance_session_id
+           JOIN timetable t2 ON t2.timetable_id = ases2.timetable_id`
+        : "";
+    const facultyConflictWhere = facultyId ? `AND t2.faculty_id = $1` : "";
+
+    const studentCountQuery = facultyId
+        ? `SELECT COUNT(DISTINCT s.student_id) FROM student s
+           JOIN timetable t3 ON t3.batch_id = s.batch_id
+           WHERE s.is_active = TRUE AND t3.faculty_id = $1`
+        : `SELECT COUNT(*) FROM student WHERE is_active = TRUE`;
 
     const [students, faculty, attendance, devices, conflicts] = await Promise.all([
-        pool.query(`SELECT COUNT(*) FROM student WHERE is_active = TRUE`),
+        pool.query(studentCountQuery, facultyId ? [facultyId] : []),
         pool.query(`SELECT COUNT(*) FROM faculty WHERE is_active = TRUE`),
         pool.query(
             `SELECT
                 COUNT(*) AS total,
                 COUNT(*) FILTER (WHERE attendance_status = 'PRESENT') AS present
-             FROM attendance WHERE is_active = TRUE`
+             FROM attendance
+             ${facultyAttendanceJoin}
+             WHERE attendance.is_active = TRUE ${facultyAttendanceWhere}`,
+            facultyId ? [facultyId] : []
         ),
         pool.query(`SELECT COUNT(*) FROM device WHERE device_status = 'ACTIVE' AND is_active = TRUE`),
-        pool.query(`SELECT COUNT(*) FROM conflict WHERE conflict_status = 'PENDING' AND is_active = TRUE`)
+        pool.query(
+            `SELECT COUNT(*) FROM conflict
+             ${facultyConflictJoin}
+             WHERE conflict.conflict_status = 'PENDING' AND conflict.is_active = TRUE ${facultyConflictWhere}`,
+            facultyId ? [facultyId] : []
+        )
     ]);
 
     const attRow = attendance.rows[0];

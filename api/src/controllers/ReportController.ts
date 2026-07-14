@@ -55,7 +55,10 @@ export const getDailyReport = async (
 
     try {
 
-        const report = await ReportService.getDailyReport();
+        const date = req.query.date as string | undefined;
+        const facultyId = req.user?.role === "FACULTY" ? req.user.facultyId : undefined;
+
+        const report = await ReportService.getDailyReport(date, facultyId);
 
         res.status(200).json({
             success: true,
@@ -153,6 +156,15 @@ export const getDepartmentReport = async (
 
     try {
 
+        // Unlike daily/summary (scoped down to the caller's own sessions),
+        // a department report is inherently about a group small enough
+        // that a faculty member could infer a colleague's numbers from it
+        // — so it's blocked outright for FACULTY, not scoped.
+        if (req.user?.role === "FACULTY") {
+            res.status(403).json({ success: false, message: "Department reports are not available to faculty accounts" });
+            return;
+        }
+
         const departmentId =
             req.params.departmentId as string;
 
@@ -187,8 +199,10 @@ export const getSummaryReport = async (
 
     try {
 
+        const facultyId = req.user?.role === "FACULTY" ? req.user.facultyId : undefined;
+
         const report =
-            await ReportService.getSummaryReport();
+            await ReportService.getSummaryReport(facultyId);
 
         res.status(200).json({
             success: true,

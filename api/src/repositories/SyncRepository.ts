@@ -144,6 +144,11 @@ const pullForRoom = async (roomId: string, since?: string) => {
     // always merged `data.conflicts` from this response (see
     // AttendanceSyncWorker), but the backend never populated the field, so
     // it silently stayed an empty list on every device forever.
+    //
+    // Routed by room two ways since attendance_session_id can be NULL
+    // (session-less conflicts — see uploadConflicts): via the session's
+    // timetable when there is one, falling back to the reporting device's
+    // own room when there isn't.
     const conflictSinceClause = since ? "AND c.updated_at > $2" : "";
     const conflictParams = since ? [roomId, since] : [roomId];
 
@@ -152,9 +157,10 @@ const pullForRoom = async (roomId: string, since?: string) => {
                 c.student_id, c.device_id, c.conflict_type, c.severity,
                 c.conflict_status, c.description, c.updated_at
          FROM conflict c
-         JOIN attendance_session ases ON ases.attendance_session_id = c.attendance_session_id
-         JOIN timetable t ON t.timetable_id = ases.timetable_id
-         WHERE t.room_id = $1 AND c.is_active = TRUE ${conflictSinceClause}`,
+         LEFT JOIN attendance_session ases ON ases.attendance_session_id = c.attendance_session_id
+         LEFT JOIN timetable t ON t.timetable_id = ases.timetable_id
+         LEFT JOIN device d ON d.device_id = c.device_id
+         WHERE (t.room_id = $1 OR d.room_id = $1) AND c.is_active = TRUE ${conflictSinceClause}`,
         conflictParams
     );
 
@@ -525,11 +531,11 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
  * Device push — conflicts the decision engine detected locally (low
  * confidence match, duplicate attendance, unknown face, etc.), batched
  * like attendance upload. Each record resolves its own attendance_session
- * the same way an attendance record does (timetable_id + session_date —
- * conflict.attendance_session_id is NOT NULL, so a record with neither
- * can't be created; it's counted as failed rather than aborting the whole
- * batch). client_refs lets the device correlate created rows back to its
- * local ids.
+ * from timetable_id + session_date when both are present; a record with
+ * neither (e.g. SYNC_FAILURE/DEVICE_ERROR outside any scheduled period) is
+ * still created with a NULL session — device_id alone still attributes it
+ * to a room/device. client_refs lets the device correlate created rows
+ * back to its local ids.
  */
 export const uploadConflicts = async (deviceId: string, conflictData: any) => {
 
@@ -555,10 +561,17 @@ export const uploadConflicts = async (deviceId: string, conflictData: any) => {
         const record = records[i];
         const clientRef = clientRefs[i] ?? i;
         try {
-            if (!record.timetable_id || !record.session_date) {
-                throw new Error("timetable_id and session_date are required to anchor a conflict to a session");
-            }
-            const sessionId = await resolveCached(record.timetable_id, record.session_date);
+            // A session is resolved when possible (anchors the conflict to
+            // a specific class period, and is what lets the conflicts-down
+            // sync route it back to every device in that room). When
+            // there's no timetable_id/session_date — SYNC_FAILURE,
+            // DEVICE_ERROR, or an UNKNOWN_FACE hit outside any scheduled
+            // period — the conflict is still created with a NULL session;
+            // device_id (always set here) still attributes it to a
+            // room/device.
+            const sessionId = (record.timetable_id && record.session_date)
+                ? await resolveCached(record.timetable_id, record.session_date)
+                : null;
 
             const result = await pool.query(
                 `INSERT INTO conflict

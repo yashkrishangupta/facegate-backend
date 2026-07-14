@@ -11,8 +11,10 @@ export const getDashboardSummary = async (
 
     try {
 
+        const facultyId = req.user?.role === "FACULTY" ? req.user.facultyId : undefined;
+
         const dashboard =
-            await DashboardService.getDashboardSummary();
+            await DashboardService.getDashboardSummary(facultyId);
 
         res.status(200).json({
             success: true,
@@ -40,8 +42,10 @@ export const getRecentAttendance = async (
 
     try {
 
+        const facultyId = req.user?.role === "FACULTY" ? req.user.facultyId : undefined;
+
         const attendance =
-            await DashboardService.getRecentAttendance();
+            await DashboardService.getRecentAttendance(facultyId);
 
         res.status(200).json({
             success: true,
@@ -69,8 +73,10 @@ export const getRecentConflicts = async (
 
     try {
 
+        const facultyId = req.user?.role === "FACULTY" ? req.user.facultyId : undefined;
+
         const conflicts =
-            await DashboardService.getRecentConflicts();
+            await DashboardService.getRecentConflicts(facultyId);
 
         res.status(200).json({
             success: true,
