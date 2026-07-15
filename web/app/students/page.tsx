@@ -12,6 +12,8 @@ interface Student {
   email?: string
   phone?: string
   gender: string
+  date_of_birth?: string
+  profile_photo_url?: string
   admission_year: number
   student_status: string
   batch_code?: string
@@ -53,7 +55,8 @@ export default function StudentsPage() {
   const [form, setForm] = useState({
     academicYear: '', programId: '', semester: '', batchId: '',
     registrationNumber: '', rollNumber: '', firstName: '',
-    lastName: '', email: '', phone: '', gender: 'Male', admissionYear: '2024'
+    lastName: '', email: '', phone: '', gender: 'Male', admissionYear: '2024',
+    dateOfBirth: '', profilePhotoUrl: ''
   })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -142,7 +145,9 @@ export default function StudentsPage() {
           email: form.email || undefined,
           phone: form.phone || undefined,
           gender: form.gender,
-          admission_year: Number(form.admissionYear)
+          admission_year: Number(form.admissionYear),
+          date_of_birth: form.dateOfBirth || undefined,
+          profile_photo_url: form.profilePhotoUrl || undefined
         })
       })
       const json = await res.json()
@@ -151,7 +156,7 @@ export default function StudentsPage() {
         return
       }
       setShowModal(false)
-      setForm({ academicYear: '', programId: '', semester: '', batchId: '', registrationNumber: '', rollNumber: '', firstName: '', lastName: '', email: '', phone: '', gender: 'Male', admissionYear: '2024' })
+      setForm({ academicYear: '', programId: '', semester: '', batchId: '', registrationNumber: '', rollNumber: '', firstName: '', lastName: '', email: '', phone: '', gender: 'Male', admissionYear: '2024', dateOfBirth: '', profilePhotoUrl: '' })
       fetchStudents()
     } catch { setError('Network error — is the API server running?') } finally { setSubmitting(false) }
   }
@@ -202,17 +207,29 @@ export default function StudentsPage() {
         <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] overflow-hidden">
           <table className="w-full">
             <thead><tr className="border-b border-[#2F4E73]">
-              {['Roll No', 'Name', 'Batch', 'Program', 'Semester', 'Enrollment', 'Status', 'Actions'].map(h => (
+              {['Photo', 'Roll No', 'Name', 'DOB', 'Batch', 'Program', 'Semester', 'Enrollment', 'Status', 'Actions'].map(h => (
                 <th key={h} className="text-left p-4 text-[#90A6BD] text-sm font-bold">{h}</th>
               ))}
             </tr></thead>
             <tbody>
-              {loading ? <tr><td colSpan={8} className="text-center text-[#90A6BD] p-8">Loading...</td></tr>
-              : filteredBySearch.length === 0 ? <tr><td colSpan={8} className="text-center text-[#90A6BD] p-8">No students found.</td></tr>
+              {loading ? <tr><td colSpan={10} className="text-center text-[#90A6BD] p-8">Loading...</td></tr>
+              : filteredBySearch.length === 0 ? <tr><td colSpan={10} className="text-center text-[#90A6BD] p-8">No students found.</td></tr>
               : filteredBySearch.map((s) => (
                 <tr key={s.student_id} className="border-b border-[#1E3A5F] hover:bg-[#1E3A5F] transition-colors">
+                  <td className="p-4">
+                    {s.profile_photo_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={s.profile_photo_url} alt="" className="w-9 h-9 rounded-full object-cover border border-[#2F4E73]"
+                        onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                    ) : (
+                      <div className="w-9 h-9 rounded-full bg-[#2F4E73] flex items-center justify-center text-xs text-[#90A6BD] font-bold">
+                        {s.first_name?.[0]}{s.last_name?.[0]}
+                      </div>
+                    )}
+                  </td>
                   <td className="p-4 text-[#5DA9FF] font-mono text-sm">{s.roll_number}</td>
                   <td className="p-4 text-white">{s.first_name} {s.last_name}</td>
+                  <td className="p-4 text-[#90A6BD] text-sm">{s.date_of_birth ? new Date(s.date_of_birth).toLocaleDateString() : '—'}</td>
                   <td className="p-4 text-[#90A6BD]">{s.batch_code || '—'}</td>
                   <td className="p-4 text-[#90A6BD]">{s.program || '—'}</td>
                   <td className="p-4 text-[#90A6BD]">{s.semester ?? '—'}</td>
@@ -275,6 +292,18 @@ export default function StudentsPage() {
                 </select>
                 <input placeholder="Admission Year" type="number" value={form.admissionYear}
                   onChange={(e) => setForm(p => ({ ...p, admissionYear: e.target.value }))} className={inputCls} />
+                <div>
+                  <p className="text-[#90A6BD] text-xs mb-1">Date of Birth (optional)</p>
+                  <input type="date" value={form.dateOfBirth}
+                    onChange={(e) => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} className={`${inputCls} w-full`} />
+                </div>
+                <input placeholder="Profile Photo URL (optional)" value={form.profilePhotoUrl}
+                  onChange={(e) => setForm(p => ({ ...p, profilePhotoUrl: e.target.value }))} className={inputCls} />
+                {form.profilePhotoUrl && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.profilePhotoUrl} alt="Preview" className="w-16 h-16 rounded-full object-cover border border-[#2F4E73]"
+                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
+                )}
               </div>
               <div className="flex gap-3 mt-5">
                 <button onClick={() => { setShowModal(false); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>

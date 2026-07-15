@@ -83,8 +83,8 @@ Full/incremental sync response shape:
   lookback at 30 days; incremental uses the same `since` filter as everything else.
   **Merge rule**: compare `updated_at` against the local row for the same
   `(timetable_id, session_date, student_id)` — most-recent-wins, regardless of source.
-  This is a network-contract-only fix — the Android-side merge logic against the local Room
-  database still needs writing.
+  Implemented end-to-end, including the Android-side merge against the local Room database
+  (`AttendanceSyncWorker.mergeAttendanceDown` → `AttendanceDao.applyServerUpdateIfNewer`).
 
 **Upload attendance** — unchanged: `{ records: [{ timetable_id, session_date, student_id,
 status, attendance_mode, confidence, timestamp }] }`, idempotent, upserts on
@@ -383,4 +383,3 @@ syncStatus, lastSyncType, lastError }` — reads the device's own row plus its m
 
 `GET /:deviceId/sync-history` → last 100 `device_sync_log` rows, newest first — this table
 was already being written to on every sync/pair call; these endpoints just expose it.
-

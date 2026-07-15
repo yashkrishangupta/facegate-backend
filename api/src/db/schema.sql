@@ -405,9 +405,9 @@ CREATE TABLE student (
 
     batch_id UUID NOT NULL,
 
-    registration_number VARCHAR(20) NOT NULL UNIQUE,
+    registration_number VARCHAR(20) NOT NULL,
 
-    roll_number VARCHAR(20) NOT NULL UNIQUE,
+    roll_number VARCHAR(20) NOT NULL,
 
     first_name VARCHAR(50) NOT NULL,
 
@@ -438,6 +438,17 @@ CREATE TABLE student (
         REFERENCES batch(batch_id)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
+
+    -- Roll numbers and registration numbers are only unique within a batch
+    -- for this university (e.g. batch A and batch B can both have roll
+    -- number "12") — previously these were UNIQUE across the whole table,
+    -- which rejected a perfectly valid enrollment just because some other
+    -- batch happened to reuse the same number.
+    CONSTRAINT uq_student_batch_roll
+        UNIQUE (batch_id, roll_number),
+
+    CONSTRAINT uq_student_batch_registration
+        UNIQUE (batch_id, registration_number),
 
     CONSTRAINT chk_student_gender
         CHECK (
