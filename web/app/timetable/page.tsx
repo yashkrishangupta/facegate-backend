@@ -14,6 +14,7 @@ interface TimetableEntry {
   room_id: string
   room: string
   day: string
+  lecture_number: number
   start_time: string
   end_time: string
 }
@@ -95,7 +96,25 @@ export default function TimetablePage() {
   )
 
   const handleCreate = async () => {
-    setError(''); setSubmitting(true)
+    setError('')
+
+    // Same check the backend now does server-side (findLectureNumberClash) —
+    // done here too so it's instant and doesn't round-trip to find out.
+    // This is the case findSchedulingClash's time-overlap check doesn't
+    // cover: same batch/day/lecture_number can still hit
+    // uq_timetable_slot_active even when the two times don't overlap at
+    // all, since lecture_number isn't derived from start_time/end_time.
+    const lectureTaken = entries.find(e =>
+      e.batch_id === form.batchId
+      && e.day?.toLowerCase() === form.dayOfWeek.toLowerCase()
+      && e.lecture_number === Number(form.lectureNumber)
+    )
+    if (lectureTaken) {
+      setError(`This batch already has lecture ${form.lectureNumber} on ${form.dayOfWeek} (${lectureTaken.subject_name}, ${lectureTaken.start_time}–${lectureTaken.end_time}) — pick a different lecture number.`)
+      return
+    }
+
+    setSubmitting(true)
     try {
       const res = await apiFetch('/timetable', {
         method: 'POST',

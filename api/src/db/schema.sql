@@ -568,15 +568,31 @@ CREATE TABLE timetable (
     CONSTRAINT chk_time
         CHECK (
             start_time < end_time
-        ),
+        )
 
-    CONSTRAINT uq_timetable_slot
-UNIQUE (
-    batch_id,
-    day_of_week,
-    lecture_number
-)
+    -- uq_timetable_slot (formerly UNIQUE(batch_id, day_of_week, lecture_number)
+    -- as a plain table constraint) removed from here — see
+    -- uq_timetable_slot_active below and findSchedulingClash in
+    -- TimetableRepository.ts for why and what replaced it.
+
 );
+
+-- Same-batch defense-in-depth: kept as a backstop against a same
+-- (batch, day, lecture_number) row being inserted twice for whatever
+-- reason (a race, a direct DB write, a future bulk-import path). The real
+-- same-batch time-overlap check is findSchedulingClash in
+-- TimetableRepository.ts, which compares actual start_time/end_time —
+-- lecture_number is just a display label an admin types in, nothing
+-- enforces that it maps 1:1 to a fixed time range, so two different
+-- lecture_numbers for the same batch could still have overlapping actual
+-- times without tripping this index. Partial (WHERE is_active) so a
+-- soft-deleted period doesn't permanently block reusing its slot — the
+-- previous plain UNIQUE constraint applied to every row regardless of
+-- is_active, which is exactly the bug that made re-creating a replaced
+-- period fail.
+CREATE UNIQUE INDEX uq_timetable_slot_active
+    ON timetable (batch_id, day_of_week, lecture_number)
+    WHERE is_active = TRUE;
 
 -- ==========================================================
 -- TABLE: Attendance Session

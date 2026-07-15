@@ -61,10 +61,31 @@ export const createTimetable = async (
         effective_from: timetableData.effective_from || new Date().toISOString().slice(0, 10)
     };
 
-    // The DB's own unique constraint only catches a clash for the SAME
-    // batch — this catches a different batch double-booking the same room
-    // or the same faculty member at an overlapping time.
+    // Checked first and separately from the time-overlap clash below:
+    // reusing a lecture_number for this batch/day is invalid even if the
+    // new time doesn't actually overlap the existing one — that's what
+    // uq_timetable_slot_active enforces at the DB level, and this is what
+    // turns hitting it into a message that says what's wrong instead of a
+    // raw constraint-name error.
+    const lectureClash = await TimetableRepository.findLectureNumberClash({
+        batch_id: dataWithDefaults.batch_id,
+        day_of_week: dataWithDefaults.day_of_week,
+        lecture_number: Number(dataWithDefaults.lecture_number)
+    });
+    if (lectureClash) {
+        throw new Error(
+            `This batch already has lecture ${dataWithDefaults.lecture_number} on ${dataWithDefaults.day_of_week}`
+            + ` (${lectureClash.subject_name}, ${lectureClash.start_time}–${lectureClash.end_time})`
+            + ` — pick a different lecture number.`
+        );
+    }
+
+    // Checks all three clash types with a real time-interval comparison —
+    // same batch double-booked (regardless of lecture_number), a different
+    // batch double-booking the same room, or the same faculty member
+    // teaching two batches at once.
     const clash = await TimetableRepository.findSchedulingClash({
+        batch_id: dataWithDefaults.batch_id,
         room_id: dataWithDefaults.room_id,
         faculty_id: dataWithDefaults.faculty_id,
         day_of_week: dataWithDefaults.day_of_week,
@@ -73,9 +94,11 @@ export const createTimetable = async (
     });
     if (clash) {
         throw new Error(
-            clash.clash_type === "room"
-                ? `Room is already booked for batch ${clash.batch_code} at this day/time`
-                : `Faculty is already teaching batch ${clash.batch_code} at this day/time`
+            clash.clash_type === "batch"
+                ? `This batch already has a period at an overlapping day/time`
+                : clash.clash_type === "room"
+                    ? `Room is already booked for batch ${clash.batch_code} at this day/time`
+                    : `Faculty is already teaching batch ${clash.batch_code} at this day/time`
         );
     }
 

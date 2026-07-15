@@ -106,12 +106,21 @@ export const getTimetableByFaculty = async (facultyId: string) => {
 };
 
 /**
- * Finds any OTHER batch's period that overlaps this room or faculty member
- * at the same day/time. The existing DB constraint only catches a clash for
- * the *same* batch — this catches the room/faculty case, which nothing else
- * guards against.
+ * Finds any period — same batch or a different one — that overlaps this
+ * room, faculty member, or batch at the same day/time, using actual
+ * start_time/end_time comparison rather than a lecture_number label.
+ *
+ * The same-batch case used to be left entirely to uq_timetable_slot_active
+ * (a DB index on (batch_id, day_of_week, lecture_number)) on the
+ * assumption that lecture_number reliably identifies a time slot — it
+ * doesn't. lecture_number is a plain integer an admin types in; nothing
+ * ties it to a fixed start_time/end_time, so two different lecture_number
+ * values for the same batch could have genuinely overlapping times and
+ * that index would never catch it. This checks the real interval instead,
+ * for all three clash types in one query.
  */
 export const findSchedulingClash = async (params: {
+    batch_id: string;
     room_id: string;
     faculty_id: string;
     day_of_week: string;
@@ -119,21 +128,59 @@ export const findSchedulingClash = async (params: {
     end_time: string;
     exclude_timetable_id?: string;
 }) => {
-    const { room_id, faculty_id, day_of_week, start_time, end_time, exclude_timetable_id } = params;
+    const { batch_id, room_id, faculty_id, day_of_week, start_time, end_time, exclude_timetable_id } = params;
 
     const result = await pool.query(
-        `SELECT t.timetable_id, t.room_id, t.faculty_id, b.batch_code,
-                CASE WHEN t.room_id = $1 THEN 'room' ELSE 'faculty' END AS clash_type
+        `SELECT t.timetable_id, t.room_id, t.faculty_id, t.batch_id, b.batch_code,
+                CASE
+                    WHEN t.batch_id = $7 THEN 'batch'
+                    WHEN t.room_id = $1 THEN 'room'
+                    ELSE 'faculty'
+                END AS clash_type
          FROM timetable t
          JOIN batch b ON b.batch_id = t.batch_id
          WHERE t.is_active = TRUE
            AND t.day_of_week = $3
-           AND (t.room_id = $1 OR t.faculty_id = $2)
+           AND (t.room_id = $1 OR t.faculty_id = $2 OR t.batch_id = $7)
            AND t.start_time < $5
            AND t.end_time > $4
            AND ($6::uuid IS NULL OR t.timetable_id != $6)
          LIMIT 1`,
-        [room_id, faculty_id, day_of_week, start_time, end_time, exclude_timetable_id ?? null]
+        [room_id, faculty_id, day_of_week, start_time, end_time, exclude_timetable_id ?? null, batch_id]
+    );
+
+    return result.rows[0] || null;
+};
+
+/**
+ * Checks the exact condition uq_timetable_slot_active enforces — same
+ * (batch_id, day_of_week, lecture_number) among active rows — independent
+ * of findSchedulingClash's time-overlap check. A lecture_number can be
+ * reused for the same batch/day at a genuinely different, non-overlapping
+ * time and still hit the DB index, since the index doesn't know about
+ * start_time/end_time at all; without this check that case surfaces as a
+ * raw "duplicate key value violates unique constraint uq_timetable_slot_active"
+ * instead of a message that says what's actually wrong.
+ */
+export const findLectureNumberClash = async (params: {
+    batch_id: string;
+    day_of_week: string;
+    lecture_number: number;
+    exclude_timetable_id?: string;
+}) => {
+    const { batch_id, day_of_week, lecture_number, exclude_timetable_id } = params;
+
+    const result = await pool.query(
+        `SELECT t.timetable_id, sub.subject_name, t.start_time, t.end_time
+         FROM timetable t
+         JOIN subject sub ON sub.subject_id = t.subject_id
+         WHERE t.is_active = TRUE
+           AND t.batch_id = $1
+           AND t.day_of_week = $2
+           AND t.lecture_number = $3
+           AND ($4::uuid IS NULL OR t.timetable_id != $4)
+         LIMIT 1`,
+        [batch_id, day_of_week, lecture_number, exclude_timetable_id ?? null]
     );
 
     return result.rows[0] || null;
