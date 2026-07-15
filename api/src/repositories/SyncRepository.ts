@@ -474,6 +474,25 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
             throw new Error(`No active batch found for batch_code "${batch_code}"`);
         }
 
+        // A student with this (batch, roll_number) or registration_number
+        // may already exist — most commonly because the roster was entered
+        // on the website first (name/roll/registration, no photo capture
+        // there) and the device is only now attaching the face embedding.
+        // The device always proposes a fresh student_id for a "new"
+        // enrollment (it can't know the website's UUID for that row), so
+        // matching purely on student_id would treat this as a brand-new
+        // insert and collide with uq_student_batch_roll / the registration
+        // number's UNIQUE constraint — a permanent, unrecoverable 400 for
+        // any student the office already rostered. Resolve to the existing
+        // row when there is one instead of only ever trying to create.
+        const existing = await client.query(
+            `SELECT student_id FROM student
+             WHERE (batch_id = $1 AND roll_number = $2) OR registration_number = $3
+             LIMIT 1`,
+            [batchId, roll_number, registration_number]
+        );
+        const resolvedStudentId = existing.rows[0]?.student_id ?? student_id;
+
         const studentResult = await client.query(
             `INSERT INTO student
                 (student_id, batch_id, registration_number, roll_number, first_name,
@@ -493,7 +512,7 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
                 updated_at = CURRENT_TIMESTAMP
              RETURNING student_id`,
             [
-                student_id, batchId, registration_number, roll_number, first_name,
+                resolvedStudentId, batchId, registration_number, roll_number, first_name,
                 last_name, email ?? null, phone ?? null, gender, date_of_birth ?? null,
                 admission_year
             ]
@@ -512,7 +531,7 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
                 last_updated = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
              RETURNING embedding_id`,
-            [student_id, JSON.stringify(embedding_data), embedding_version || "v1.0", model_name, 75.00]
+            [resolvedStudentId, JSON.stringify(embedding_data), embedding_version || "v1.0", model_name, 75.00]
         );
 
         await client.query("COMMIT");
