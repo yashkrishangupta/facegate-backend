@@ -441,7 +441,7 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
     const {
         student_id, batch_code, registration_number, roll_number,
         first_name, last_name, gender, admission_year, date_of_birth,
-        email, phone, profile_photo_url, embedding_data, embedding_version, model_name
+        email, phone, embedding_data, embedding_version, model_name
     } = enrollData;
 
     if (!student_id || !batch_code || !registration_number || !roll_number
@@ -459,20 +459,26 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
     try {
         await client.query("BEGIN");
 
+        // Device-captured batch_code can arrive with different casing or
+        // stray whitespace than what's stored (it's often a free-text
+        // "class" label picked on-device, not guaranteed to be an exact
+        // copy of batch.batch_code) — match case/whitespace-insensitively
+        // rather than failing every retry on a cosmetic mismatch.
         const batchResult = await client.query(
-            `SELECT batch_id FROM batch WHERE batch_code = $1 AND is_active = TRUE`,
+            `SELECT batch_id FROM batch
+             WHERE UPPER(TRIM(batch_code)) = UPPER(TRIM($1)) AND is_active = TRUE`,
             [batch_code]
         );
         const batchId = batchResult.rows[0]?.batch_id;
         if (!batchId) {
-            throw new Error(`No active batch found for batch_code ${batch_code}`);
+            throw new Error(`No active batch found for batch_code "${batch_code}"`);
         }
 
         const studentResult = await client.query(
             `INSERT INTO student
                 (student_id, batch_id, registration_number, roll_number, first_name,
-                 last_name, email, phone, gender, date_of_birth, admission_year, profile_photo_url)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                 last_name, email, phone, gender, date_of_birth, admission_year)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              ON CONFLICT (student_id) DO UPDATE SET
                 batch_id = EXCLUDED.batch_id,
                 registration_number = EXCLUDED.registration_number,
@@ -484,13 +490,12 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
                 gender = EXCLUDED.gender,
                 date_of_birth = EXCLUDED.date_of_birth,
                 admission_year = EXCLUDED.admission_year,
-                profile_photo_url = EXCLUDED.profile_photo_url,
                 updated_at = CURRENT_TIMESTAMP
              RETURNING student_id`,
             [
                 student_id, batchId, registration_number, roll_number, first_name,
                 last_name, email ?? null, phone ?? null, gender, date_of_birth ?? null,
-                admission_year, profile_photo_url ?? null
+                admission_year
             ]
         );
 
