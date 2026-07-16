@@ -163,7 +163,12 @@ export default function StudentsPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete?')) return
-    await apiFetch(`/students/${id}`, { method: 'DELETE' }).catch(() => {})
+    setError('')
+    try {
+      const res = await apiFetch(`/students/${id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to delete student'); return }
+    } catch { setError('Network error — is the API server running?') }
     fetchStudents()
   }
 
@@ -203,6 +208,8 @@ export default function StudentsPage() {
             className="flex-1 bg-[#1A2436] border border-[#2F4E73] rounded-xl px-4 py-3 text-white placeholder-[#90A6BD] focus:outline-none focus:border-[#5DA9FF]" />
           <button onClick={() => setShowModal(true)} className="bg-[#5DA9FF] text-white font-bold px-6 py-3 rounded-xl hover:opacity-90">+ Add Student</button>
         </div>
+
+        {error && !showModal && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
 
         <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] overflow-hidden">
           <table className="w-full">

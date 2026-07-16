@@ -441,7 +441,7 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
     const {
         student_id, batch_code, registration_number, roll_number,
         first_name, last_name, gender, admission_year, date_of_birth,
-        email, phone, embedding_data, embedding_version, model_name
+        profile_photo_url, email, phone, embedding_data, embedding_version, model_name
     } = enrollData;
 
     if (!student_id || !batch_code || !registration_number || !roll_number
@@ -496,8 +496,8 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
         const studentResult = await client.query(
             `INSERT INTO student
                 (student_id, batch_id, registration_number, roll_number, first_name,
-                 last_name, email, phone, gender, date_of_birth, admission_year)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                 last_name, email, phone, gender, date_of_birth, admission_year, profile_photo_url)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
              ON CONFLICT (student_id) DO UPDATE SET
                 batch_id = EXCLUDED.batch_id,
                 registration_number = EXCLUDED.registration_number,
@@ -509,12 +509,17 @@ export const enrollStudent = async (deviceId: string, enrollData: any) => {
                 gender = EXCLUDED.gender,
                 date_of_birth = EXCLUDED.date_of_birth,
                 admission_year = EXCLUDED.admission_year,
+                -- Only overwrite an existing photo when this enrollment
+                -- actually supplies one — otherwise a re-enrollment (embedding
+                -- refresh only) would null out a photo set earlier on the
+                -- website.
+                profile_photo_url = COALESCE(EXCLUDED.profile_photo_url, student.profile_photo_url),
                 updated_at = CURRENT_TIMESTAMP
              RETURNING student_id`,
             [
                 resolvedStudentId, batchId, registration_number, roll_number, first_name,
                 last_name, email ?? null, phone ?? null, gender, date_of_birth ?? null,
-                admission_year
+                admission_year, profile_photo_url ?? null
             ]
         );
 

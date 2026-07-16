@@ -1,0 +1,26 @@
+-- 005_change_log_entity_id_text.sql
+--
+-- change_log.entity_id was declared UUID, which is correct for every
+-- website-originated write (batch_id, program_id, student_id, ...) but not
+-- for the device-pushed "missed session" events added for the Android
+-- Change Log push (POST /devices/change-log -> DeviceController.
+-- pushChangeLogEvents -> ChangeLogRepository.recordChange). Those events
+-- use a composite id like "missed:<timetable_id>:<yyyy-MM-dd>", which is
+-- not valid UUID input.
+--
+-- ChangeLogRepository.recordChange wraps its INSERT in try/catch and only
+-- console.error's on failure (deliberately, so a logging failure never
+-- breaks the real operation it's describing) — so every device change-log
+-- push has been failing this INSERT with "invalid input syntax for type
+-- uuid" silently. The device still gets a 200 back and marks its local
+-- overrides as pushed, so nothing ever retries, and nothing ever shows up
+-- on the website's Change Log page.
+--
+-- Widening the column to TEXT fixes this without affecting any existing
+-- caller: every current entity_id value is already a UUID's string form,
+-- and nothing joins on change_log.entity_id (confirmed — it's a
+-- display/audit column only), so TEXT stores and displays them identically.
+--
+-- Safe to run multiple times.
+
+ALTER TABLE change_log ALTER COLUMN entity_id TYPE TEXT;

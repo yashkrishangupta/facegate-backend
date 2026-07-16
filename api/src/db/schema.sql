@@ -1343,7 +1343,11 @@ CREATE TABLE change_log (
 
     entity_name VARCHAR(50) NOT NULL,
 
-    entity_id UUID,
+    -- TEXT, not UUID: most callers pass a real row UUID here, but device-
+    -- pushed change-log events (POST /devices/change-log, "missed session"
+    -- entries) use a composite id like "missed:<timetable_id>:<date>".
+    -- See migration 005_change_log_entity_id_text.sql.
+    entity_id TEXT,
 
     action VARCHAR(20) NOT NULL,
 

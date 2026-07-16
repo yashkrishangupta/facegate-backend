@@ -586,11 +586,18 @@ function AdminsTab() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [error, setError] = useState('')
+  const [listError, setListError] = useState('')
   const [createdUsername, setCreatedUsername] = useState('')
   const [form, setForm] = useState({
     employee_id: '', first_name: '', last_name: '', email: '', phone: '',
     role: 'ADMIN', password: ''
   })
+  // POST /admin and DELETE /admin/:id both require requireSuperAdmin on the
+  // backend (see routes/admin.ts) — a plain ADMIN hitting either previously
+  // got a silent 403 here (Create/Deactivate rendered unconditionally,
+  // errors swallowed by `.catch(() => {})`), which looked exactly like
+  // "the delete button doesn't do anything."
+  const isSuperAdmin = getAdmin()?.role === 'SUPER_ADMIN'
 
   const fetchItems = async () => {
     setLoading(true)
@@ -617,7 +624,12 @@ function AdminsTab() {
 
   const handleDeactivate = async (id: string) => {
     if (!confirm('Deactivate this account?')) return
-    await apiFetch(`/admin/${id}`, { method: 'DELETE' }).catch(() => {})
+    setListError('')
+    try {
+      const res = await apiFetch(`/admin/${id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setListError(json.message || 'Failed to deactivate account'); return }
+    } catch { setListError('Network error — is the API server running?') }
     fetchItems()
   }
 
@@ -627,8 +639,9 @@ function AdminsTab() {
         <p className="text-[#90A6BD] text-sm">
           Direct account creation for ADMIN/SUPER_ADMIN/VIEWER roles — use the Faculty tab instead for FACULTY accounts, since those also need a teaching record.
         </p>
-        <button onClick={() => setShowModal(true)} className="bg-[#4ADE80] text-black font-bold px-5 py-2 rounded-xl text-sm whitespace-nowrap">+ New Admin</button>
+        {isSuperAdmin && <button onClick={() => setShowModal(true)} className="bg-[#4ADE80] text-black font-bold px-5 py-2 rounded-xl text-sm whitespace-nowrap">+ New Admin</button>}
       </div>
+      {listError && <p className="text-[#F87171] text-sm mb-4">{listError}</p>}
       {loading ? <p className="text-[#90A6BD]">Loading...</p> : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {items.filter((a: any) => a.role !== 'FACULTY').map((a: any) => (
@@ -642,7 +655,7 @@ function AdminsTab() {
                   {a.account_status}
                 </span>
               </div>
-              <button onClick={() => handleDeactivate(a.admin_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+              {isSuperAdmin && <button onClick={() => handleDeactivate(a.admin_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>}
             </div>
           ))}
         </div>
