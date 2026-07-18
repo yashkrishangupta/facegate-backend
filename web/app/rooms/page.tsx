@@ -15,12 +15,30 @@ interface Room {
 
 const ROOM_TYPES = ['Lecture Hall', 'Laboratory', 'Seminar Hall', 'Tutorial Room', 'Conference Room']
 
+const inputCls = "bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]"
+
+function Modal({ title, onClose, children }: { title: string, onClose: () => void, children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+        <h2 className="text-white font-bold text-lg mb-4">{title}</h2>
+        {children}
+      </div>
+    </div>
+  )
+}
+
 export default function RoomsPage() {
   const router = useRouter()
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState<Room | null>(null)
   const [form, setForm] = useState({
+    roomNumber: '', roomName: '', buildingName: '', floorNumber: '',
+    roomType: ROOM_TYPES[0], capacity: '30'
+  })
+  const [editForm, setEditForm] = useState({
     roomNumber: '', roomName: '', buildingName: '', floorNumber: '',
     roomType: ROOM_TYPES[0], capacity: '30'
   })
@@ -66,6 +84,50 @@ export default function RoomsPage() {
     } catch { setError('Network error — is the API server running?') } finally { setSubmitting(false) }
   }
 
+  const openEdit = (r: Room) => {
+    setEditItem(r)
+    setEditForm({
+      roomNumber: r.room_number,
+      roomName: r.room_name || '',
+      buildingName: r.building_name,
+      floorNumber: r.floor_number != null ? String(r.floor_number) : '',
+      roomType: r.room_type,
+      capacity: String(r.capacity)
+    })
+    setError('')
+  }
+
+  const handleEdit = async () => {
+    if (!editItem) return
+    setError(''); setSubmitting(true)
+    try {
+      const res = await apiFetch(`/rooms/${editItem.room_id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          room_number: editForm.roomNumber,
+          room_name: editForm.roomName || undefined,
+          building_name: editForm.buildingName,
+          floor_number: editForm.floorNumber ? Number(editForm.floorNumber) : undefined,
+          room_type: editForm.roomType,
+          capacity: Number(editForm.capacity)
+        })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        setError(json.message || 'Failed to update room')
+        return
+      }
+      setEditItem(null)
+      fetchRooms()
+    } catch { setError('Network error') } finally { setSubmitting(false) }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this room? Any device paired to it may be affected.')) return
+    await apiFetch(`/rooms/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetchRooms()
+  }
+
   return (
     <main className="min-h-screen bg-[#0D1727] text-white p-8">
       <div className="max-w-6xl mx-auto">
@@ -94,43 +156,63 @@ export default function RoomsPage() {
                   <p>{r.building_name}{r.floor_number != null ? `, Floor ${r.floor_number}` : ''}</p>
                   <p>{r.room_type} · Capacity {r.capacity}</p>
                 </div>
+                <div className="flex gap-4 mt-3">
+                  <button onClick={() => openEdit(r)} className="text-[#F59E0B] text-sm hover:text-white">Edit</button>
+                  <button onClick={() => handleDelete(r.room_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button>
+                </div>
               </div>
             ))}
           </div>
         )}
         {showModal && (
-          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-            <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md">
-              <h2 className="text-white font-bold text-lg mb-4">New Room</h2>
-              {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
-              <div className="flex flex-col gap-3">
-                <input placeholder="Room Number (e.g. Room-101)" value={form.roomNumber}
-                  onChange={(e) => setForm(p => ({ ...p, roomNumber: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <input placeholder="Room Name (optional)" value={form.roomName}
-                  onChange={(e) => setForm(p => ({ ...p, roomName: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <input placeholder="Building Name" value={form.buildingName}
-                  onChange={(e) => setForm(p => ({ ...p, buildingName: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <input placeholder="Floor Number (optional)" type="number" value={form.floorNumber}
-                  onChange={(e) => setForm(p => ({ ...p, floorNumber: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <select value={form.roomType}
-                  onChange={(e) => setForm(p => ({ ...p, roomType: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]">
-                  {ROOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-                <input placeholder="Capacity" type="number" value={form.capacity}
-                  onChange={(e) => setForm(p => ({ ...p, capacity: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-              </div>
-              <div className="flex gap-3 mt-5">
-                <button onClick={() => { setShowModal(false); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
-                <button onClick={handleCreate} disabled={submitting} className="flex-1 bg-[#4ADE80] text-black font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Creating...' : 'Create Room'}</button>
-              </div>
+          <Modal title="New Room" onClose={() => { setShowModal(false); setError('') }}>
+            {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
+            <div className="flex flex-col gap-3">
+              <input placeholder="Room Number (e.g. Room-101)" value={form.roomNumber}
+                onChange={(e) => setForm(p => ({ ...p, roomNumber: e.target.value }))} className={inputCls} />
+              <input placeholder="Room Name (optional)" value={form.roomName}
+                onChange={(e) => setForm(p => ({ ...p, roomName: e.target.value }))} className={inputCls} />
+              <input placeholder="Building Name" value={form.buildingName}
+                onChange={(e) => setForm(p => ({ ...p, buildingName: e.target.value }))} className={inputCls} />
+              <input placeholder="Floor Number (optional)" type="number" value={form.floorNumber}
+                onChange={(e) => setForm(p => ({ ...p, floorNumber: e.target.value }))} className={inputCls} />
+              <select value={form.roomType}
+                onChange={(e) => setForm(p => ({ ...p, roomType: e.target.value }))} className={inputCls}>
+                {ROOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input placeholder="Capacity" type="number" value={form.capacity}
+                onChange={(e) => setForm(p => ({ ...p, capacity: e.target.value }))} className={inputCls} />
             </div>
-          </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => { setShowModal(false); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+              <button onClick={handleCreate} disabled={submitting} className="flex-1 bg-[#4ADE80] text-black font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Creating...' : 'Create Room'}</button>
+            </div>
+          </Modal>
+        )}
+        {editItem && (
+          <Modal title="Edit Room" onClose={() => { setEditItem(null); setError('') }}>
+            {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
+            <div className="flex flex-col gap-3">
+              <input placeholder="Room Number" value={editForm.roomNumber}
+                onChange={(e) => setEditForm(p => ({ ...p, roomNumber: e.target.value }))} className={inputCls} />
+              <input placeholder="Room Name (optional)" value={editForm.roomName}
+                onChange={(e) => setEditForm(p => ({ ...p, roomName: e.target.value }))} className={inputCls} />
+              <input placeholder="Building Name" value={editForm.buildingName}
+                onChange={(e) => setEditForm(p => ({ ...p, buildingName: e.target.value }))} className={inputCls} />
+              <input placeholder="Floor Number (optional)" type="number" value={editForm.floorNumber}
+                onChange={(e) => setEditForm(p => ({ ...p, floorNumber: e.target.value }))} className={inputCls} />
+              <select value={editForm.roomType}
+                onChange={(e) => setEditForm(p => ({ ...p, roomType: e.target.value }))} className={inputCls}>
+                {ROOM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+              <input placeholder="Capacity" type="number" value={editForm.capacity}
+                onChange={(e) => setEditForm(p => ({ ...p, capacity: e.target.value }))} className={inputCls} />
+            </div>
+            <div className="flex gap-3 mt-5">
+              <button onClick={() => { setEditItem(null); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+              <button onClick={handleEdit} disabled={submitting} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Saving...' : 'Save'}</button>
+            </div>
+          </Modal>
         )}
       </div>
     </main>
