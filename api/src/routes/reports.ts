@@ -3,6 +3,9 @@ import { Router } from "express";
 import {
     getDailyReport,
     getStudentReport,
+    getBatchReport,
+    getSubjectReport,
+    getRoomReport,
     getFacultyReport,
     getDepartmentReport,
     getSummaryReport,
@@ -33,6 +36,15 @@ router.get("/export", exportReport);
 
 // Student Report
 router.get("/student/:studentId", getStudentReport);
+
+// Batch Report
+router.get("/batch/:batchId", getBatchReport);
+
+// Subject Report
+router.get("/subject/:subjectId", getSubjectReport);
+
+// Room Report
+router.get("/room/:roomId", getRoomReport);
 
 // Faculty Report
 router.get("/faculty/:facultyId", getFacultyReport);

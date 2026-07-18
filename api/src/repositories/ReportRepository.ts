@@ -20,8 +20,10 @@ export const getExportRows = async (
     const idCondition = reportType === "student" 
         ? "(a.student_id::text = $1 OR s.roll_number ILIKE $1 OR s.registration_number ILIKE $1 OR (s.first_name || ' ' || s.last_name) ILIKE $1)"
         : reportType === "batch" 
-        ? "s.batch_id = $1"
-        : "t.subject_id = $1";
+        ? "(s.batch_id::text = $1 OR b.batch_code ILIKE $1)"
+        : reportType === "subject"
+        ? "(t.subject_id::text = $1 OR sub.subject_code ILIKE $1 OR sub.subject_name ILIKE $1)"
+        : "(t.room_id::text = $1 OR r.room_number ILIKE $1)";
 
     const conditions = [idCondition, "a.is_active = TRUE"];
     const values: any[] = [id];
@@ -47,6 +49,7 @@ export const getExportRows = async (
          JOIN timetable t ON t.timetable_id = ases.timetable_id
          JOIN subject sub ON sub.subject_id = t.subject_id
          JOIN faculty f ON f.faculty_id = t.faculty_id
+         JOIN room r ON r.room_id = t.room_id
          WHERE ${conditions.join(" AND ")}
          ORDER BY a.attendance_time DESC`,
         values
@@ -258,6 +261,179 @@ export const getDepartmentReport = async (departmentId: string) => {
         departmentName: nameResult.rows[0]?.department_name ?? null,
         totalStudents: Number(stats.total_students),
         averageAttendance: totalMarks === 0 ? 0 : Number(((present / totalMarks) * 100).toFixed(2))
+    };
+};
+
+export const getBatchReport = async (batchSearch: string, from?: string, to?: string) => {
+    const batchResult = await pool.query(
+        `SELECT batch_id, batch_code FROM batch 
+         WHERE batch_id::text = $1 OR batch_code ILIKE $1 
+         LIMIT 1`, [batchSearch]
+    );
+    if (batchResult.rows.length === 0) throw new Error("Batch not found");
+    const batch = batchResult.rows[0];
+    const resolvedBatchId = batch.batch_id;
+
+    const joinConditions = ["a.student_id = s.student_id", "a.is_active = TRUE"];
+    const values: any[] = [resolvedBatchId];
+    if (from) { values.push(from); joinConditions.push(`a.attendance_time::date >= $${values.length}`); }
+    if (to) { values.push(to); joinConditions.push(`a.attendance_time::date <= $${values.length}`); }
+
+    const studentsResult = await pool.query(
+        `SELECT 
+            s.student_id, 
+            s.roll_number, 
+            s.first_name || ' ' || s.last_name AS student,
+            COUNT(a.attendance_id) FILTER (WHERE a.attendance_status = 'PRESENT') AS present,
+            COUNT(a.attendance_id) AS total
+         FROM student s
+         LEFT JOIN attendance a ON ${joinConditions.join(" AND ")}
+         WHERE s.batch_id = $1 AND s.is_active = TRUE
+         GROUP BY s.student_id, s.roll_number, s.first_name, s.last_name
+         ORDER BY s.roll_number`,
+        values
+    );
+
+    let totalStudents = 0;
+    let overallPresent = 0;
+    let overallTotal = 0;
+    
+    const students = studentsResult.rows.map((r: any) => {
+        const p = Number(r.present);
+        const t = Number(r.total);
+        totalStudents++;
+        overallPresent += p;
+        overallTotal += t;
+        return {
+            studentId: r.student_id,
+            rollNumber: r.roll_number || "",
+            student: r.student,
+            present: p,
+            total: t,
+            attendance: t === 0 ? 0 : Number(((p/t)*100).toFixed(2))
+        };
+    });
+
+    return {
+        batchId: resolvedBatchId,
+        batch: batch.batch_code,
+        overallAttendance: overallTotal === 0 ? 0 : Number(((overallPresent/overallTotal)*100).toFixed(2)),
+        totalStudents,
+        students
+    };
+};
+
+export const getSubjectReport = async (subjectSearch: string, from?: string, to?: string) => {
+    const subjectResult = await pool.query(
+        `SELECT subject_id, subject_code, subject_name FROM subject 
+         WHERE subject_id::text = $1 OR subject_code ILIKE $1 OR subject_name ILIKE $1 
+         LIMIT 1`, [subjectSearch]
+    );
+    if (subjectResult.rows.length === 0) throw new Error("Subject not found");
+    const subject = subjectResult.rows[0];
+    const resolvedSubjectId = subject.subject_id;
+
+    const conditions = ["t.subject_id = $1", "ases.is_active = TRUE"];
+    const values: any[] = [resolvedSubjectId];
+    if (from) { values.push(from); conditions.push(`ases.session_date >= $${values.length}`); }
+    if (to) { values.push(to); conditions.push(`ases.session_date <= $${values.length}`); }
+
+    const sessionsResult = await pool.query(
+        `SELECT 
+            ases.session_date::text AS date,
+            b.batch_code AS batch,
+            ases.present_students AS present,
+            ases.total_students AS total
+         FROM attendance_session ases
+         JOIN timetable t ON t.timetable_id = ases.timetable_id
+         JOIN batch b ON b.batch_id = t.batch_id
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY ases.session_date DESC`,
+        values
+    );
+
+    let overallPresent = 0;
+    let overallTotal = 0;
+
+    const sessions = sessionsResult.rows.map((r: any) => {
+        const p = Number(r.present || 0);
+        const t = Number(r.total || 0);
+        overallPresent += p;
+        overallTotal += t;
+        return {
+            date: r.date,
+            batch: r.batch,
+            present: p,
+            total: t,
+            percentage: t === 0 ? 0 : Number(((p/t)*100).toFixed(2))
+        };
+    });
+
+    return {
+        subjectId: resolvedSubjectId,
+        subject: subject.subject_name,
+        subjectCode: subject.subject_code,
+        totalSessions: sessions.length,
+        overallAttendance: overallTotal === 0 ? 0 : Number(((overallPresent/overallTotal)*100).toFixed(2)),
+        sessions
+    };
+};
+
+export const getRoomReport = async (roomSearch: string, from?: string, to?: string) => {
+    const roomResult = await pool.query(
+        `SELECT room_id, room_number FROM room 
+         WHERE room_id::text = $1 OR room_number ILIKE $1 
+         LIMIT 1`, [roomSearch]
+    );
+    if (roomResult.rows.length === 0) throw new Error("Room not found");
+    const room = roomResult.rows[0];
+    const resolvedRoomId = room.room_id;
+
+    const conditions = ["t.room_id = $1", "ases.is_active = TRUE"];
+    const values: any[] = [resolvedRoomId];
+    if (from) { values.push(from); conditions.push(`ases.session_date >= $${values.length}`); }
+    if (to) { values.push(to); conditions.push(`ases.session_date <= $${values.length}`); }
+
+    const sessionsResult = await pool.query(
+        `SELECT 
+            ases.session_date::text AS date,
+            b.batch_code AS batch,
+            sub.subject_code AS subject_code,
+            ases.present_students AS present,
+            ases.total_students AS total
+         FROM attendance_session ases
+         JOIN timetable t ON t.timetable_id = ases.timetable_id
+         JOIN batch b ON b.batch_id = t.batch_id
+         JOIN subject sub ON sub.subject_id = t.subject_id
+         WHERE ${conditions.join(" AND ")}
+         ORDER BY ases.session_date DESC`,
+        values
+    );
+
+    let overallPresent = 0;
+    let overallTotal = 0;
+
+    const sessions = sessionsResult.rows.map((r: any) => {
+        const p = Number(r.present || 0);
+        const t = Number(r.total || 0);
+        overallPresent += p;
+        overallTotal += t;
+        return {
+            date: r.date,
+            batch: r.batch,
+            subjectCode: r.subject_code,
+            present: p,
+            total: t,
+            percentage: t === 0 ? 0 : Number(((p/t)*100).toFixed(2))
+        };
+    });
+
+    return {
+        roomId: resolvedRoomId,
+        roomNumber: room.room_number,
+        totalSessions: sessions.length,
+        overallAttendance: overallTotal === 0 ? 0 : Number(((overallPresent/overallTotal)*100).toFixed(2)),
+        sessions
     };
 };
 

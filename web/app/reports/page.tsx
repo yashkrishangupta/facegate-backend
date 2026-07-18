@@ -32,6 +32,7 @@ interface StudentRow {
 interface SessionRow {
    date: string;
    batch: string;
+   subjectCode?: string;
    present: number;
    total: number;
    percentage: number;
@@ -58,6 +59,13 @@ type ReportData =
         kind: 'subject';
         subject: string;
         subjectCode: string;
+        totalSessions: number;
+        overallAttendance: number;
+        sessions: SessionRow[];
+     }
+   | {
+        kind: 'room';
+        roomNumber: string;
         totalSessions: number;
         overallAttendance: number;
         sessions: SessionRow[];
@@ -138,6 +146,7 @@ export default function ReportsPage() {
    const [studentIdInput, setStudentIdInput] = useState('');
    const [batchIdInput, setBatchIdInput] = useState('');
    const [subjectIdInput, setSubjectIdInput] = useState('');
+   const [roomIdInput, setRoomIdInput] = useState('');
    const [dateFrom, setDateFrom] = useState('');
    const [dateTo, setDateTo] = useState('');
    const [semester, setSemester] = useState('');
@@ -168,30 +177,36 @@ export default function ReportsPage() {
          switch (activeTab) {
             case 'student':
                if (!studentIdInput.trim()) {
-                  setError('Enter a Student ID or Roll Number.');
+                  setError('Enter a Student ID, Roll No. or Name.');
                   setLoading(false);
                   return;
                }
                url = `${API_BASE}/reports/student/${studentIdInput.trim()}?${buildParams()}`;
                break;
             case 'batch':
-               setError(
-                  'Batch-level reports are not available yet — the backend only exposes a department-level report today. Ask your backend teammate to add GET /reports/batch/:batchId.',
-               );
-               setLoading(false);
-               return;
+               if (!batchIdInput.trim()) {
+                  setError('Enter a Batch Code or ID.');
+                  setLoading(false);
+                  return;
+               }
+               url = `${API_BASE}/reports/batch/${batchIdInput.trim()}?${buildParams()}`;
+               break;
             case 'subject':
-               setError(
-                  'Subject-level reports are not available yet — this endpoint has not been built on the backend. Ask your backend teammate to add GET /reports/subject/:subjectId.',
-               );
-               setLoading(false);
-               return;
+               if (!subjectIdInput.trim()) {
+                  setError('Enter a Subject Code, Name, or ID.');
+                  setLoading(false);
+                  return;
+               }
+               url = `${API_BASE}/reports/subject/${subjectIdInput.trim()}?${buildParams()}`;
+               break;
             case 'room':
-               setError(
-                  'Room reports are based on device assignment. Use the Devices page to view room-level sessions.',
-               );
-               setLoading(false);
-               return;
+               if (!roomIdInput.trim()) {
+                  setError('Enter a Room Number or ID.');
+                  setLoading(false);
+                  return;
+               }
+               url = `${API_BASE}/reports/room/${roomIdInput.trim()}?${buildParams()}`;
+               break;
          }
 
          const res = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
@@ -202,13 +217,13 @@ export default function ReportsPage() {
             return;
          }
 
-      setData({ kind: 'student', ...json.data });
+      setData({ kind: activeTab, ...json.data });
       } catch {
          setError('Network error — make sure the API server is running.');
       } finally {
          setLoading(false);
       }
-   }, [activeTab, studentIdInput, batchIdInput, subjectIdInput, buildParams]);
+   }, [activeTab, studentIdInput, batchIdInput, subjectIdInput, roomIdInput, buildParams]);
 
    // ── CSV Export ────────────────────────────────────────────────────────────
    const handleExport = useCallback(async () => {
@@ -226,6 +241,10 @@ export default function ReportsPage() {
          case 'subject':
             reportType = 'subject';
             entityId = subjectIdInput.trim();
+            break;
+         case 'room':
+            reportType = 'room';
+            entityId = roomIdInput.trim();
             break;
          default:
             setError(
@@ -269,6 +288,7 @@ export default function ReportsPage() {
       studentIdInput,
       batchIdInput,
       subjectIdInput,
+      roomIdInput,
       dateFrom,
       dateTo,
    ]);
@@ -533,6 +553,63 @@ export default function ReportsPage() {
          );
       }
 
+      if (data.kind === 'room') {
+         const sorted = [...data.sessions].sort((a, b) => {
+            const dir = sortAsc ? 1 : -1;
+            if (sortCol === 'date') return dir * a.date.localeCompare(b.date);
+            if (sortCol === 'batch')
+               return dir * a.batch.localeCompare(b.batch);
+            if (sortCol === 'subjectCode')
+               return dir * (a.subjectCode?.localeCompare(b.subjectCode || '') || 0);
+            if (sortCol === 'pct') return dir * (a.percentage - b.percentage);
+            return 0;
+         });
+         return (
+            <table className='w-full text-sm'>
+               <thead>
+                  <tr className='border-b border-[#1E2D42]'>
+                     {[
+                        { key: 'date', label: 'Date' },
+                        { key: 'batch', label: 'Batch' },
+                        { key: 'subjectCode', label: 'Subject' },
+                        { key: 'present', label: 'Present / Total' },
+                        { key: 'pct', label: 'Attendance %' },
+                     ].map((h) => (
+                        <th
+                           key={h.key}
+                           onClick={() => toggleSort(h.key)}
+                           className='text-left p-4 text-[#5A7A9A] font-bold text-xs tracking-wider cursor-pointer hover:text-white transition-colors select-none'
+                        >
+                           {h.label}
+                           <SortIcon col={h.key} />
+                        </th>
+                     ))}
+                  </tr>
+               </thead>
+               <tbody>
+                  {sorted.map((r, i) => (
+                     <tr
+                        key={i}
+                        className='border-b border-[#1A2436] hover:bg-[#141E2E] transition-colors'
+                     >
+                        <td className='p-4 font-mono text-xs text-[#90A6BD]'>
+                           {r.date}
+                        </td>
+                        <td className='p-4 font-medium'>{r.batch}</td>
+                        <td className='p-4 text-[#90A6BD]'>{r.subjectCode || '—'}</td>
+                        <td className='p-4 text-[#90A6BD]'>
+                           {r.present} / {r.total}
+                        </td>
+                        <td className='p-4'>
+                           <PctChip value={r.percentage} />
+                        </td>
+                     </tr>
+                  ))}
+               </tbody>
+            </table>
+         );
+      }
+
       return null;
    })();
 
@@ -636,14 +713,14 @@ export default function ReportsPage() {
                   {activeTab === 'batch' && (
                      <div className='flex flex-col gap-1.5'>
                         <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Batch ID
+                           Batch Code or ID
                         </label>
                         <input
                            id='input-batch-id'
                            type='text'
                            value={batchIdInput}
                            onChange={(e) => setBatchIdInput(e.target.value)}
-                           placeholder='e.g. b2a7d8d3-8f3a-...'
+                           placeholder='e.g. CS-2024, b2a7...'
                            className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
                         />
                      </div>
@@ -651,14 +728,29 @@ export default function ReportsPage() {
                   {activeTab === 'subject' && (
                      <div className='flex flex-col gap-1.5'>
                         <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Subject ID
+                           Subject Code, Name, or ID
                         </label>
                         <input
                            id='input-subject-id'
                            type='text'
                            value={subjectIdInput}
                            onChange={(e) => setSubjectIdInput(e.target.value)}
-                           placeholder='e.g. a1d3c5b8-9f7d-...'
+                           placeholder='e.g. CS101, Data Structures...'
+                           className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
+                        />
+                     </div>
+                  )}
+                  {activeTab === 'room' && (
+                     <div className='flex flex-col gap-1.5'>
+                        <label className='text-xs text-[#5A7A9A] font-medium'>
+                           Room Number or ID
+                        </label>
+                        <input
+                           id='input-room-id'
+                           type='text'
+                           value={roomIdInput}
+                           onChange={(e) => setRoomIdInput(e.target.value)}
+                           placeholder='e.g. Room-101, a3f9...'
                            className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
                         />
                      </div>
@@ -686,8 +778,7 @@ export default function ReportsPage() {
                </div>
 
                {/* Date range */}
-               {activeTab !== 'room' && (
-                  <div className='flex flex-wrap items-end gap-4'>
+               <div className='flex flex-wrap items-end gap-4'>
                      <div className='flex flex-col gap-1.5'>
                         <label className='text-xs text-[#5A7A9A] font-medium'>
                            From
@@ -740,12 +831,10 @@ export default function ReportsPage() {
                            </button>
                         )}
                      </div>
-                  </div>
-               )}
+               </div>
 
                {/* Run button */}
-               {activeTab !== 'room' && (
-                  <button
+               <button
                      id='btn-run-report'
                      onClick={runReport}
                      disabled={loading}
@@ -759,29 +848,8 @@ export default function ReportsPage() {
                      ) : (
                         'Run Report'
                      )}
-                  </button>
-               )}
+               </button>
             </div>
-
-            {/* ── Room tab notice ───────────────────────────────────────────────── */}
-            {activeTab === 'room' && (
-               <div className='bg-[#0D1727] border border-[#1E2D42] rounded-2xl p-8 text-center'>
-                  <p className='text-3xl mb-3'>🚪</p>
-                  <p className='font-bold text-white mb-1'>Room Reports</p>
-                  <p className='text-[#5A7A9A] text-sm max-w-md mx-auto'>
-                     Room-level attendance is tied to device assignment. Each
-                     device is paired to one room and syncs its own schedule. To
-                     view per-room attendance, go to the{' '}
-                     <a
-                        href='/devices'
-                        className='text-[#5DA9FF] hover:underline font-bold'
-                     >
-                        Devices page
-                     </a>{' '}
-                     and click a device to see its session history.
-                  </p>
-               </div>
-            )}
 
             {/* ── Error ────────────────────────────────────────────────────────── */}
             {error && (

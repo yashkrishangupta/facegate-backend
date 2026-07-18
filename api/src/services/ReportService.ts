@@ -35,6 +35,18 @@ export const getStudentReport = async (
     return await ReportRepository.getStudentReport(studentId, from, to, semester);
 };
 
+export const getBatchReport = async (batchId: string, from?: string, to?: string) => {
+    return await ReportRepository.getBatchReport(batchId, from, to);
+};
+
+export const getSubjectReport = async (subjectId: string, from?: string, to?: string) => {
+    return await ReportRepository.getSubjectReport(subjectId, from, to);
+};
+
+export const getRoomReport = async (roomId: string, from?: string, to?: string) => {
+    return await ReportRepository.getRoomReport(roomId, from, to);
+};
+
 /**
  * Faculty Report
  */
