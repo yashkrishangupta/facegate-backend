@@ -38,7 +38,6 @@ export default function TimetablePage() {
   const [rooms, setRooms] = useState<Room[]>([])
   const [loading, setLoading] = useState(true)
   const [activeDay, setActiveDay] = useState(DAYS[0])
-
   const [filters, setFilters] = useState({ academic_year: '', program_id: '', semester: '', batch_id: '', room_id: '' })
   const [showModal, setShowModal] = useState(false)
   const [error, setError] = useState('')
@@ -48,6 +47,16 @@ export default function TimetablePage() {
     lectureNumber: '1', startTime: '09:00', endTime: '10:00', attendanceWindowMinutes: '15',
     effectiveFrom: new Date().toISOString().slice(0, 10)
   })
+
+  // Edit state
+  const [editModal, setEditModal] = useState(false)
+  const [editEntry, setEditEntry] = useState<TimetableEntry | null>(null)
+  const [editForm, setEditForm] = useState({
+    facultyId: '', subjectId: '', roomId: '', dayOfWeek: '',
+    lectureNumber: '1', startTime: '', endTime: '', attendanceWindowMinutes: '15'
+  })
+  const [editError, setEditError] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   const fetchTimetable = async () => {
     setLoading(true)
@@ -97,48 +106,72 @@ export default function TimetablePage() {
 
   const handleCreate = async () => {
     setError('')
-
-    // Same check the backend now does server-side (findLectureNumberClash) —
-    // done here too so it's instant and doesn't round-trip to find out.
-    // This is the case findSchedulingClash's time-overlap check doesn't
-    // cover: same batch/day/lecture_number can still hit
-    // uq_timetable_slot_active even when the two times don't overlap at
-    // all, since lecture_number isn't derived from start_time/end_time.
     const lectureTaken = entries.find(e =>
-      e.batch_id === form.batchId
-      && e.day?.toLowerCase() === form.dayOfWeek.toLowerCase()
-      && e.lecture_number === Number(form.lectureNumber)
+      e.batch_id === form.batchId &&
+      e.day?.toLowerCase() === form.dayOfWeek.toLowerCase() &&
+      e.lecture_number === Number(form.lectureNumber)
     )
     if (lectureTaken) {
       setError(`This batch already has lecture ${form.lectureNumber} on ${form.dayOfWeek} (${lectureTaken.subject_name}, ${lectureTaken.start_time}–${lectureTaken.end_time}) — pick a different lecture number.`)
       return
     }
-
     setSubmitting(true)
     try {
       const res = await apiFetch('/timetable', {
         method: 'POST',
         body: JSON.stringify({
-          batch_id: form.batchId,
-          faculty_id: form.facultyId,
-          subject_id: form.subjectId,
-          room_id: form.roomId,
-          day_of_week: form.dayOfWeek,
-          lecture_number: Number(form.lectureNumber),
-          start_time: form.startTime,
-          end_time: form.endTime,
+          batch_id: form.batchId, faculty_id: form.facultyId, subject_id: form.subjectId,
+          room_id: form.roomId, day_of_week: form.dayOfWeek, lecture_number: Number(form.lectureNumber),
+          start_time: form.startTime, end_time: form.endTime,
           attendance_window_minutes: Number(form.attendanceWindowMinutes),
           effective_from: form.effectiveFrom
         })
       })
       const json = await res.json()
-      if (!res.ok || !json.success) {
-        setError(json.message || 'Failed to create period — check for a scheduling clash (same batch, day, and lecture number)')
-        return
-      }
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to create period'); return }
       setShowModal(false)
       fetchTimetable()
     } catch { setError('Network error — is the API server running?') } finally { setSubmitting(false) }
+  }
+
+  const openEdit = (e: TimetableEntry) => {
+    setEditEntry(e)
+    setEditForm({
+      facultyId: '',
+      subjectId: '',
+      roomId: e.room_id,
+      dayOfWeek: e.day,
+      lectureNumber: String(e.lecture_number),
+      startTime: e.start_time.slice(0, 5),
+      endTime: e.end_time.slice(0, 5),
+      attendanceWindowMinutes: '15'
+    })
+    setEditError('')
+    setEditModal(true)
+  }
+
+  const handleEdit = async () => {
+    if (!editEntry) return
+    setEditError(''); setEditSubmitting(true)
+    try {
+      const res = await apiFetch(`/timetable/${editEntry.timetable_id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          faculty_id: editForm.facultyId || undefined,
+          subject_id: editForm.subjectId || undefined,
+          room_id: editForm.roomId || undefined,
+          day_of_week: editForm.dayOfWeek,
+          lecture_number: Number(editForm.lectureNumber),
+          start_time: editForm.startTime,
+          end_time: editForm.endTime,
+          attendance_window_minutes: Number(editForm.attendanceWindowMinutes)
+        })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setEditError(json.message || 'Failed to update'); return }
+      setEditModal(false)
+      fetchTimetable()
+    } catch { setEditError('Network error') } finally { setEditSubmitting(false) }
   }
 
   const handleDelete = async (id: string) => {
@@ -198,6 +231,7 @@ export default function TimetablePage() {
         ) : dayEntries.length === 0 ? (
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center">
             <p className="text-[#90A6BD] font-bold">No periods for {activeDay}</p>
+            <button onClick={() => { setForm(f => ({ ...f, dayOfWeek: activeDay })); setShowModal(true) }} className="mt-4 bg-[#5DA9FF] text-white font-bold px-6 py-2 rounded-xl hover:opacity-90 text-sm">+ Add Period</button>
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -206,9 +240,11 @@ export default function TimetablePage() {
                 <div>
                   <p className="text-white font-bold">{e.subject_name}</p>
                   <p className="text-[#90A6BD] text-sm mt-1">{e.faculty_name} · {e.batch_code} · Room {e.room}</p>
+                  <p className="text-[#4A6080] text-xs mt-1">Lecture {e.lecture_number}</p>
                 </div>
                 <div className="flex items-center gap-4">
                   <p className="text-[#5DA9FF] text-sm font-mono">{e.start_time} – {e.end_time}</p>
+                  <button onClick={() => openEdit(e)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
                   <button onClick={() => handleDelete(e.timetable_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button>
                 </div>
               </div>
@@ -216,6 +252,7 @@ export default function TimetablePage() {
           </div>
         )}
 
+        {/* Add Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -261,6 +298,49 @@ export default function TimetablePage() {
                 <button onClick={() => { setShowModal(false); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
                 <button onClick={handleCreate} disabled={submitting || !form.batchId || !form.facultyId || !form.subjectId || !form.roomId}
                   className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Creating...' : 'Create'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {editModal && editEntry && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+              <h2 className="text-white font-bold text-lg mb-1">Edit Period</h2>
+              <p className="text-[#90A6BD] text-sm mb-4">{editEntry.subject_name} · {editEntry.batch_code}</p>
+              {editError && <p className="text-[#F87171] text-sm mb-3">{editError}</p>}
+              <div className="flex flex-col gap-3">
+                <select value={editForm.facultyId} onChange={(e) => setEditForm(p => ({ ...p, facultyId: e.target.value }))} className={inputCls}>
+                  <option value="">Keep current faculty ({editEntry.faculty_name})</option>
+                  {faculty.map(f => <option key={f.faculty_id} value={f.faculty_id}>{f.first_name} {f.last_name}</option>)}
+                </select>
+                <select value={editForm.subjectId} onChange={(e) => setEditForm(p => ({ ...p, subjectId: e.target.value }))} className={inputCls}>
+                  <option value="">Keep current subject ({editEntry.subject_name})</option>
+                  {subjects.map(s => <option key={s.subject_id} value={s.subject_id}>{s.subject_code} — {s.subject_name}</option>)}
+                </select>
+                <select value={editForm.roomId} onChange={(e) => setEditForm(p => ({ ...p, roomId: e.target.value }))} className={inputCls}>
+                  <option value="">Keep current room ({editEntry.room})</option>
+                  {rooms.map(r => <option key={r.room_id} value={r.room_id}>{r.room_number}</option>)}
+                </select>
+                <select value={editForm.dayOfWeek} onChange={(e) => setEditForm(p => ({ ...p, dayOfWeek: e.target.value }))} className={inputCls}>
+                  {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <div className="grid grid-cols-2 gap-3">
+                  <input placeholder="Lecture #" type="number" value={editForm.lectureNumber}
+                    onChange={(e) => setEditForm(p => ({ ...p, lectureNumber: e.target.value }))} className={inputCls} />
+                  <input placeholder="Window (min)" type="number" value={editForm.attendanceWindowMinutes}
+                    onChange={(e) => setEditForm(p => ({ ...p, attendanceWindowMinutes: e.target.value }))} className={inputCls} />
+                  <input type="time" value={editForm.startTime}
+                    onChange={(e) => setEditForm(p => ({ ...p, startTime: e.target.value }))} className={inputCls} />
+                  <input type="time" value={editForm.endTime}
+                    onChange={(e) => setEditForm(p => ({ ...p, endTime: e.target.value }))} className={inputCls} />
+                </div>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => { setEditModal(false); setEditError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+                <button onClick={handleEdit} disabled={editSubmitting}
+                  className="flex-1 bg-[#F59E0B] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{editSubmitting ? 'Saving...' : 'Save Changes'}</button>
               </div>
             </div>
           </div>

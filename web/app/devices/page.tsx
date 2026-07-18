@@ -8,6 +8,7 @@ interface Device {
   device_identifier?: string
   device_name: string
   room_number?: string
+  room_id?: string
   device_status: string
   network_status: string
   battery_percentage?: number
@@ -16,10 +17,9 @@ interface Device {
   pairing_code_expires_at?: string
 }
 
-interface Room {
-  room_id: string
-  room_number: string
-}
+interface Room { room_id: string; room_number: string }
+
+const inputCls = "bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]"
 
 export default function DevicesPage() {
   const router = useRouter()
@@ -30,10 +30,14 @@ export default function DevicesPage() {
   const [form, setForm] = useState({ roomId: '', deviceName: '' })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
-  // Set right after a successful create, so the admin can copy the code
-  // before closing the dialog — it's the only place this code is guaranteed
-  // fresh (it's also visible later on the device card, until it's used).
   const [justCreated, setJustCreated] = useState<{ pairingCode: string; expiresAt: string } | null>(null)
+
+  // Edit state
+  const [editModal, setEditModal] = useState(false)
+  const [editDevice, setEditDevice] = useState<Device | null>(null)
+  const [editForm, setEditForm] = useState({ deviceName: '', roomId: '' })
+  const [editError, setEditError] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   const fetchDevices = async () => {
     setLoading(true)
@@ -62,23 +66,39 @@ export default function DevicesPage() {
     try {
       const res = await apiFetch('/devices', {
         method: 'POST',
+        body: JSON.stringify({ room_id: form.roomId, device_name: form.deviceName })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to create device'); return }
+      setJustCreated({ pairingCode: json.data.pairingCode, expiresAt: json.data.pairingCodeExpiresAt })
+      setForm({ roomId: '', deviceName: '' })
+      fetchDevices()
+    } catch { setError('Network error') } finally { setSubmitting(false) }
+  }
+
+  const openEdit = (d: Device) => {
+    setEditDevice(d)
+    setEditForm({ deviceName: d.device_name, roomId: d.room_id || '' })
+    setEditError('')
+    setEditModal(true)
+  }
+
+  const handleEdit = async () => {
+    if (!editDevice) return
+    setEditError(''); setEditSubmitting(true)
+    try {
+      const res = await apiFetch(`/devices/${editDevice.device_id}`, {
+        method: 'PUT',
         body: JSON.stringify({
-          room_id: form.roomId,
-          device_name: form.deviceName
+          device_name: editForm.deviceName,
+          room_id: editForm.roomId || undefined
         })
       })
       const json = await res.json()
-      if (!res.ok || !json.success) {
-        setError(json.message || 'Failed to create device')
-        return
-      }
-      setJustCreated({
-        pairingCode: json.data.pairingCode,
-        expiresAt: json.data.pairingCodeExpiresAt
-      })
-      setForm({ roomId: '', deviceName: '' })
+      if (!res.ok || !json.success) { setEditError(json.message || 'Failed to update'); return }
+      setEditModal(false)
       fetchDevices()
-    } catch { setError('Network error — is the API server running?') } finally { setSubmitting(false) }
+    } catch { setEditError('Network error') } finally { setEditSubmitting(false) }
   }
 
   const handleDeactivate = async (id: string) => {
@@ -100,6 +120,7 @@ export default function DevicesPage() {
           <p className="text-[#90A6BD]">Monitor all registered Android devices. New devices pair with a one-time code — <a href="/rooms" className="text-[#5DA9FF]">create a room first</a> if you haven&apos;t.</p>
           <button onClick={() => setShowModal(true)} className="bg-[#4ADE80] text-black font-bold px-6 py-3 rounded-xl hover:opacity-90 whitespace-nowrap">+ New Device</button>
         </div>
+
         {loading ? (
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center text-[#90A6BD]">Loading...</div>
         ) : devices.length === 0 ? (
@@ -132,11 +153,16 @@ export default function DevicesPage() {
                   {d.battery_percentage !== undefined && d.battery_percentage !== null && <p>Battery: <span className="text-white">{d.battery_percentage}%</span></p>}
                   {d.last_sync && <p>Last sync: <span className="text-white">{new Date(d.last_sync).toLocaleString()}</span></p>}
                 </div>
-                <button onClick={() => handleDeactivate(d.device_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+                <div className="flex gap-4 mt-4">
+                  <button onClick={() => openEdit(d)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
+                  <button onClick={() => handleDeactivate(d.device_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+                </div>
               </div>
             ))}
           </div>
         )}
+
+        {/* Create Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md">
@@ -152,22 +178,44 @@ export default function DevicesPage() {
                   <h2 className="text-white font-bold text-lg mb-4">New Device</h2>
                   {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
                   <div className="flex flex-col gap-3">
-                    <select value={form.roomId}
-                      onChange={(e) => setForm(p => ({ ...p, roomId: e.target.value }))}
-                      className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]">
+                    <select value={form.roomId} onChange={(e) => setForm(p => ({ ...p, roomId: e.target.value }))} className={inputCls}>
                       <option value="">Select a room…</option>
                       {rooms.map(r => <option key={r.room_id} value={r.room_id}>{r.room_number}</option>)}
                     </select>
                     <input placeholder="Device Name (e.g. Front Door Tablet)" value={form.deviceName}
-                      onChange={(e) => setForm(p => ({ ...p, deviceName: e.target.value }))}
-                      className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
+                      onChange={(e) => setForm(p => ({ ...p, deviceName: e.target.value }))} className={inputCls} />
                   </div>
                   <div className="flex gap-3 mt-5">
                     <button onClick={closeModal} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
-                    <button onClick={handleCreate} disabled={submitting || !form.roomId || !form.deviceName} className="flex-1 bg-[#4ADE80] text-black font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Creating...' : 'Create & Get Code'}</button>
+                    <button onClick={handleCreate} disabled={submitting || !form.roomId || !form.deviceName}
+                      className="flex-1 bg-[#4ADE80] text-black font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Creating...' : 'Create & Get Code'}</button>
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {editModal && editDevice && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md">
+              <h2 className="text-white font-bold text-lg mb-1">Edit Device</h2>
+              <p className="text-[#90A6BD] text-sm mb-4">{editDevice.device_name}</p>
+              {editError && <p className="text-[#F87171] text-sm mb-3">{editError}</p>}
+              <div className="flex flex-col gap-3">
+                <input placeholder="Device Name" value={editForm.deviceName}
+                  onChange={(e) => setEditForm(p => ({ ...p, deviceName: e.target.value }))} className={inputCls} />
+                <select value={editForm.roomId} onChange={(e) => setEditForm(p => ({ ...p, roomId: e.target.value }))} className={inputCls}>
+                  <option value="">Keep current room ({editDevice.room_number || '—'})</option>
+                  {rooms.map(r => <option key={r.room_id} value={r.room_id}>{r.room_number}</option>)}
+                </select>
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => { setEditModal(false); setEditError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+                <button onClick={handleEdit} disabled={editSubmitting}
+                  className="flex-1 bg-[#F59E0B] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{editSubmitting ? 'Saving...' : 'Save Changes'}</button>
+              </div>
             </div>
           </div>
         )}

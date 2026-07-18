@@ -11,17 +11,23 @@ interface Holiday {
   description?: string
 }
 
+const inputCls = "bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]"
+const ACADEMIC_YEARS = ['2022-2026', '2023-2027', '2024-2028', '2025-2029', '2026-2030']
+
 export default function HolidaysPage() {
   const router = useRouter()
   const [holidays, setHolidays] = useState<Holiday[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({
-    holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '',
-    academicYear: '2024-2028', semester: '5'
-  })
+  const [form, setForm] = useState({ holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '', academicYear: '2024-2028', semester: '5' })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+
+  const [editModal, setEditModal] = useState(false)
+  const [editHoliday, setEditHoliday] = useState<Holiday | null>(null)
+  const [editForm, setEditForm] = useState({ holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '' })
+  const [editError, setEditError] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   const fetchHolidays = async () => {
     setLoading(true)
@@ -52,14 +58,38 @@ export default function HolidaysPage() {
         })
       })
       const json = await res.json()
-      if (!res.ok || !json.success) {
-        setError(json.message || 'Failed to create holiday')
-        return
-      }
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to create holiday'); return }
       setShowModal(false)
       setForm({ holidayName: '', holidayDate: '', holidayType: 'NATIONAL', description: '', academicYear: '2024-2028', semester: '5' })
       fetchHolidays()
-    } catch { setError('Network error — is the API server running?') } finally { setSubmitting(false) }
+    } catch { setError('Network error') } finally { setSubmitting(false) }
+  }
+
+  const openEdit = (h: Holiday) => {
+    setEditHoliday(h)
+    setEditForm({ holidayName: h.holiday_name, holidayDate: h.holiday_date.slice(0, 10), holidayType: h.holiday_type, description: h.description || '' })
+    setEditError('')
+    setEditModal(true)
+  }
+
+  const handleEdit = async () => {
+    if (!editHoliday) return
+    setEditError(''); setEditSubmitting(true)
+    try {
+      const res = await apiFetch(`/holidays/${editHoliday.holiday_id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          holiday_name: editForm.holidayName,
+          holiday_date: editForm.holidayDate,
+          holiday_type: editForm.holidayType,
+          description: editForm.description || undefined
+        })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setEditError(json.message || 'Failed to update'); return }
+      setEditModal(false)
+      fetchHolidays()
+    } catch { setEditError('Network error') } finally { setEditSubmitting(false) }
   }
 
   const handleDelete = async (id: string) => {
@@ -87,6 +117,7 @@ export default function HolidaysPage() {
           <p className="text-[#90A6BD]">Attendance is not recorded on holiday dates</p>
           <button onClick={() => setShowModal(true)} className="bg-[#F87171] text-white font-bold px-6 py-3 rounded-xl hover:opacity-90">+ Add Holiday</button>
         </div>
+
         {loading ? (
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center text-[#90A6BD]">Loading...</div>
         ) : holidays.length === 0 ? (
@@ -98,7 +129,7 @@ export default function HolidaysPage() {
           <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] overflow-hidden">
             <table className="w-full">
               <thead><tr className="border-b border-[#2F4E73]">
-                {['Holiday', 'Date', 'Type', 'Actions'].map(h => (
+                {['Holiday','Date','Type','Actions'].map(h => (
                   <th key={h} className="text-left p-4 text-[#90A6BD] text-sm font-bold">{h}</th>
                 ))}
               </tr></thead>
@@ -108,42 +139,66 @@ export default function HolidaysPage() {
                     <td className="p-4 text-white font-medium">{h.holiday_name}</td>
                     <td className="p-4 text-[#90A6BD]">{new Date(h.holiday_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</td>
                     <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full ${typeColors[h.holiday_type] || 'bg-[#1A2436] text-[#90A6BD]'}`}>{h.holiday_type}</span></td>
-                    <td className="p-4"><button onClick={() => handleDelete(h.holiday_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button></td>
+                    <td className="p-4">
+                      <div className="flex gap-3">
+                        <button onClick={() => openEdit(h)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
+                        <button onClick={() => handleDelete(h.holiday_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        {/* Add Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md">
               <h2 className="text-white font-bold text-lg mb-4">Add Holiday</h2>
               {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
               <div className="flex flex-col gap-3">
-                <input placeholder="Holiday Name" value={form.holidayName}
-                  onChange={(e) => setForm(p => ({ ...p, holidayName: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <input type="date" value={form.holidayDate}
-                  onChange={(e) => setForm(p => ({ ...p, holidayDate: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <select value={form.holidayType} onChange={(e) => setForm(p => ({ ...p, holidayType: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]">
-                  {['NATIONAL', 'GAZETTED', 'INSTITUTIONAL', 'FESTIVAL', 'EMERGENCY'].map(t => <option key={t}>{t}</option>)}
+                <input placeholder="Holiday Name" value={form.holidayName} onChange={(e) => setForm(p => ({ ...p, holidayName: e.target.value }))} className={inputCls} />
+                <input type="date" value={form.holidayDate} onChange={(e) => setForm(p => ({ ...p, holidayDate: e.target.value }))} className={inputCls} />
+                <select value={form.holidayType} onChange={(e) => setForm(p => ({ ...p, holidayType: e.target.value }))} className={inputCls}>
+                  {['NATIONAL','GAZETTED','INSTITUTIONAL','FESTIVAL','EMERGENCY'].map(t => <option key={t}>{t}</option>)}
                 </select>
-                <input placeholder="Description (optional)" value={form.description}
-                  onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <input placeholder="Academic Year (e.g. 2024-2028)" value={form.academicYear}
-                  onChange={(e) => setForm(p => ({ ...p, academicYear: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
-                <input placeholder="Semester" type="number" value={form.semester}
-                  onChange={(e) => setForm(p => ({ ...p, semester: e.target.value }))}
-                  className="bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]" />
+                <input placeholder="Description (optional)" value={form.description} onChange={(e) => setForm(p => ({ ...p, description: e.target.value }))} className={inputCls} />
+                <select value={form.academicYear} onChange={(e) => setForm(p => ({ ...p, academicYear: e.target.value }))} className={inputCls}>
+                  {ACADEMIC_YEARS.map(y => <option key={y} value={y}>{y}</option>)}
+                </select>
+                <select value={form.semester} onChange={(e) => setForm(p => ({ ...p, semester: e.target.value }))} className={inputCls}>
+                  {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>Semester {s}</option>)}
+                </select>
               </div>
               <div className="flex gap-3 mt-5">
                 <button onClick={() => { setShowModal(false); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
-                <button onClick={handleCreate} disabled={submitting} className="flex-1 bg-[#F87171] text-white font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Adding...' : 'Add Holiday'}</button>
+                <button onClick={handleCreate} disabled={submitting || !form.holidayName || !form.holidayDate}
+                  className="flex-1 bg-[#F87171] text-white font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Adding...' : 'Add Holiday'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {editModal && editHoliday && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md">
+              <h2 className="text-white font-bold text-lg mb-4">Edit Holiday</h2>
+              {editError && <p className="text-[#F87171] text-sm mb-3">{editError}</p>}
+              <div className="flex flex-col gap-3">
+                <input placeholder="Holiday Name" value={editForm.holidayName} onChange={(e) => setEditForm(p => ({ ...p, holidayName: e.target.value }))} className={inputCls} />
+                <input type="date" value={editForm.holidayDate} onChange={(e) => setEditForm(p => ({ ...p, holidayDate: e.target.value }))} className={inputCls} />
+                <select value={editForm.holidayType} onChange={(e) => setEditForm(p => ({ ...p, holidayType: e.target.value }))} className={inputCls}>
+                  {['NATIONAL','GAZETTED','INSTITUTIONAL','FESTIVAL','EMERGENCY'].map(t => <option key={t}>{t}</option>)}
+                </select>
+                <input placeholder="Description (optional)" value={editForm.description} onChange={(e) => setEditForm(p => ({ ...p, description: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => { setEditModal(false); setEditError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+                <button onClick={handleEdit} disabled={editSubmitting}
+                  className="flex-1 bg-[#F59E0B] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{editSubmitting ? 'Saving...' : 'Save Changes'}</button>
               </div>
             </div>
           </div>

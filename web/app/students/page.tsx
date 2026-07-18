@@ -25,15 +25,7 @@ interface Student {
   enrolled_on?: string
 }
 
-interface Batch {
-  batch_id: string
-  batch_code: string
-  program_id: string
-  program_name: string
-  academic_year: string
-  semester: number
-}
-
+interface Batch { batch_id: string; batch_code: string; program_id: string; program_name: string; academic_year: string; semester: number }
 interface Program { program_id: string; program_name: string }
 
 const inputCls = "bg-[#0D1727] border border-[#2F4E73] rounded-lg px-4 py-2 text-white text-sm focus:outline-none focus:border-[#5DA9FF]"
@@ -45,12 +37,7 @@ export default function StudentsPage() {
   const [programs, setPrograms] = useState<Program[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-
-  // Filters — cascading: academic year / program narrow the semester and
-  // batch dropdowns. Program comes straight from /programs now (a real
-  // table), not derived from whatever batches happen to exist.
   const [filters, setFilters] = useState({ academic_year: '', program_id: '', semester: '', batch_id: '' })
-
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState({
     academicYear: '', programId: '', semester: '', batchId: '',
@@ -61,15 +48,19 @@ export default function StudentsPage() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // Edit state
+  const [editModal, setEditModal] = useState(false)
+  const [editStudent, setEditStudent] = useState<Student | null>(null)
+  const [editForm, setEditForm] = useState({ email: '', phone: '', student_status: 'ACTIVE', profile_photo_url: '' })
+  const [editError, setEditError] = useState('')
+  const [editSubmitting, setEditSubmitting] = useState(false)
+
   const fetchBatches = async () => {
-    try { const res = await apiFetch('/batches'); const json = await res.json(); setBatches(json.data || []) }
-    catch { setBatches([]) }
+    try { const res = await apiFetch('/batches'); const json = await res.json(); setBatches(json.data || []) } catch { setBatches([]) }
   }
   const fetchPrograms = async () => {
-    try { const res = await apiFetch('/programs'); const json = await res.json(); setPrograms(json.data || []) }
-    catch { setPrograms([]) }
+    try { const res = await apiFetch('/programs'); const json = await res.json(); setPrograms(json.data || []) } catch { setPrograms([]) }
   }
-
   const fetchStudents = async () => {
     setLoading(true)
     try {
@@ -86,45 +77,31 @@ export default function StudentsPage() {
 
   useEffect(() => {
     if (!isLoggedIn()) { router.push('/login'); return }
-    fetchBatches()
-    fetchPrograms()
+    fetchBatches(); fetchPrograms()
   }, [])
-
   useEffect(() => { fetchStudents() }, [filters])
 
-  // Academic years still derived from batches (no separate table for
-  // those, unlike program). Semester/batch dropdowns narrow based on
-  // whichever academic_year/program_id are currently selected.
   const academicYears = useMemo(() => Array.from(new Set(batches.map(b => b.academic_year))).sort().reverse(), [batches])
   const semesters = useMemo(() => Array.from(new Set(
-    batches.filter(b =>
-      (!filters.academic_year || b.academic_year === filters.academic_year) &&
-      (!filters.program_id || b.program_id === filters.program_id)
-    ).map(b => b.semester)
+    batches.filter(b => (!filters.academic_year || b.academic_year === filters.academic_year) && (!filters.program_id || b.program_id === filters.program_id)).map(b => b.semester)
   )).sort((a, b) => a - b), [batches, filters.academic_year, filters.program_id])
   const filteredBatchOptions = useMemo(() => batches.filter(b =>
     (!filters.academic_year || b.academic_year === filters.academic_year) &&
     (!filters.program_id || b.program_id === filters.program_id) &&
     (!filters.semester || String(b.semester) === filters.semester)
   ), [batches, filters])
-
-  // Same cascading logic, scoped to the create-student form's own selections.
   const formSemesters = useMemo(() => Array.from(new Set(
-    batches.filter(b =>
-      (!form.academicYear || b.academic_year === form.academicYear) &&
-      (!form.programId || b.program_id === form.programId)
-    ).map(b => b.semester)
+    batches.filter(b => (!form.academicYear || b.academic_year === form.academicYear) && (!form.programId || b.program_id === form.programId)).map(b => b.semester)
   )).sort((a, b) => a - b), [batches, form.academicYear, form.programId])
   const formBatchOptions = useMemo(() => batches.filter(b =>
     (!form.academicYear || b.academic_year === form.academicYear) &&
     (!form.programId || b.program_id === form.programId) &&
     (!form.semester || String(b.semester) === form.semester)
   ), [batches, form])
-
   const filteredBySearch = useMemo(() => {
     if (!search.trim()) return students
     const q = search.toLowerCase()
-    return students.filter((s) =>
+    return students.filter(s =>
       `${s.first_name} ${s.last_name}`.toLowerCase().includes(q) ||
       s.roll_number?.toLowerCase().includes(q) ||
       s.registration_number?.toLowerCase().includes(q)
@@ -137,28 +114,46 @@ export default function StudentsPage() {
       const res = await apiFetch('/students', {
         method: 'POST',
         body: JSON.stringify({
-          batch_id: form.batchId,
-          registration_number: form.registrationNumber,
-          roll_number: form.rollNumber,
-          first_name: form.firstName,
-          last_name: form.lastName,
-          email: form.email || undefined,
-          phone: form.phone || undefined,
-          gender: form.gender,
-          admission_year: Number(form.admissionYear),
-          date_of_birth: form.dateOfBirth || undefined,
+          batch_id: form.batchId, registration_number: form.registrationNumber,
+          roll_number: form.rollNumber, first_name: form.firstName, last_name: form.lastName,
+          email: form.email || undefined, phone: form.phone || undefined, gender: form.gender,
+          admission_year: Number(form.admissionYear), date_of_birth: form.dateOfBirth || undefined,
           profile_photo_url: form.profilePhotoUrl || undefined
         })
       })
       const json = await res.json()
-      if (!res.ok || !json.success) {
-        setError(json.message || 'Failed to create student')
-        return
-      }
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to create student'); return }
       setShowModal(false)
       setForm({ academicYear: '', programId: '', semester: '', batchId: '', registrationNumber: '', rollNumber: '', firstName: '', lastName: '', email: '', phone: '', gender: 'Male', admissionYear: '2024', dateOfBirth: '', profilePhotoUrl: '' })
       fetchStudents()
-    } catch { setError('Network error — is the API server running?') } finally { setSubmitting(false) }
+    } catch { setError('Network error') } finally { setSubmitting(false) }
+  }
+
+  const openEdit = (s: Student) => {
+    setEditStudent(s)
+    setEditForm({ email: s.email || '', phone: s.phone || '', student_status: s.student_status || 'ACTIVE', profile_photo_url: s.profile_photo_url || '' })
+    setEditError('')
+    setEditModal(true)
+  }
+
+  const handleEdit = async () => {
+    if (!editStudent) return
+    setEditError(''); setEditSubmitting(true)
+    try {
+      const res = await apiFetch(`/students/${editStudent.student_id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          email: editForm.email || undefined,
+          phone: editForm.phone || undefined,
+          student_status: editForm.student_status,
+          profile_photo_url: editForm.profile_photo_url || undefined
+        })
+      })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setEditError(json.message || 'Failed to update'); return }
+      setEditModal(false)
+      fetchStudents()
+    } catch { setEditError('Network error') } finally { setEditSubmitting(false) }
   }
 
   const handleDelete = async (id: string) => {
@@ -168,7 +163,7 @@ export default function StudentsPage() {
       const res = await apiFetch(`/students/${id}`, { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to delete student'); return }
-    } catch { setError('Network error — is the API server running?') }
+    } catch { setError('Network error') }
     fetchStudents()
   }
 
@@ -214,7 +209,7 @@ export default function StudentsPage() {
         <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] overflow-hidden">
           <table className="w-full">
             <thead><tr className="border-b border-[#2F4E73]">
-              {['Photo', 'Roll No', 'Name', 'DOB', 'Batch', 'Program', 'Semester', 'Enrollment', 'Status', 'Actions'].map(h => (
+              {['Photo','Roll No','Name','DOB','Batch','Program','Semester','Enrollment','Status','Actions'].map(h => (
                 <th key={h} className="text-left p-4 text-[#90A6BD] text-sm font-bold">{h}</th>
               ))}
             </tr></thead>
@@ -246,13 +241,19 @@ export default function StudentsPage() {
                     </span>
                   </td>
                   <td className="p-4"><span className={`text-xs px-2 py-1 rounded-full ${s.student_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A00] text-[#F59E0B]'}`}>{s.student_status || 'ACTIVE'}</span></td>
-                  <td className="p-4"><button onClick={() => handleDelete(s.student_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button></td>
+                  <td className="p-4">
+                    <div className="flex gap-3">
+                      <button onClick={() => openEdit(s)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
+                      <button onClick={() => handleDelete(s.student_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
+        {/* Add Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
             <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -277,44 +278,53 @@ export default function StudentsPage() {
                   {formBatchOptions.map(b => <option key={b.batch_id} value={b.batch_id}>{b.batch_code}</option>)}
                 </select>
               </div>
-              {batches.length === 0 && (
-                <p className="text-[#F59E0B] text-xs mb-3">No batches exist yet — create one on the Master Data page first.</p>
-              )}
+              {batches.length === 0 && <p className="text-[#F59E0B] text-xs mb-3">No batches exist yet — create one on the Master Data page first.</p>}
               <p className="text-[#90A6BD] text-xs mb-2 font-bold uppercase">Student Details</p>
               <div className="flex flex-col gap-3">
-                <input placeholder="Registration Number" value={form.registrationNumber}
-                  onChange={(e) => setForm(p => ({ ...p, registrationNumber: e.target.value }))} className={inputCls} />
-                <input placeholder="Roll Number" value={form.rollNumber}
-                  onChange={(e) => setForm(p => ({ ...p, rollNumber: e.target.value }))} className={inputCls} />
-                <input placeholder="First Name" value={form.firstName}
-                  onChange={(e) => setForm(p => ({ ...p, firstName: e.target.value }))} className={inputCls} />
-                <input placeholder="Last Name" value={form.lastName}
-                  onChange={(e) => setForm(p => ({ ...p, lastName: e.target.value }))} className={inputCls} />
-                <input placeholder="Email (optional)" value={form.email}
-                  onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} className={inputCls} />
-                <input placeholder="Phone (optional)" value={form.phone}
-                  onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} />
+                <input placeholder="Registration Number" value={form.registrationNumber} onChange={(e) => setForm(p => ({ ...p, registrationNumber: e.target.value }))} className={inputCls} />
+                <input placeholder="Roll Number" value={form.rollNumber} onChange={(e) => setForm(p => ({ ...p, rollNumber: e.target.value }))} className={inputCls} />
+                <input placeholder="First Name" value={form.firstName} onChange={(e) => setForm(p => ({ ...p, firstName: e.target.value }))} className={inputCls} />
+                <input placeholder="Last Name" value={form.lastName} onChange={(e) => setForm(p => ({ ...p, lastName: e.target.value }))} className={inputCls} />
+                <input placeholder="Email (optional)" value={form.email} onChange={(e) => setForm(p => ({ ...p, email: e.target.value }))} className={inputCls} />
+                <input placeholder="Phone (optional)" value={form.phone} onChange={(e) => setForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} />
                 <select value={form.gender} onChange={(e) => setForm(p => ({ ...p, gender: e.target.value }))} className={inputCls}>
-                  {['Male', 'Female', 'Other'].map(g => <option key={g}>{g}</option>)}
+                  {['Male','Female','Other'].map(g => <option key={g}>{g}</option>)}
                 </select>
-                <input placeholder="Admission Year" type="number" value={form.admissionYear}
-                  onChange={(e) => setForm(p => ({ ...p, admissionYear: e.target.value }))} className={inputCls} />
+                <input placeholder="Admission Year" type="number" value={form.admissionYear} onChange={(e) => setForm(p => ({ ...p, admissionYear: e.target.value }))} className={inputCls} />
                 <div>
                   <p className="text-[#90A6BD] text-xs mb-1">Date of Birth (optional)</p>
-                  <input type="date" value={form.dateOfBirth}
-                    onChange={(e) => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} className={`${inputCls} w-full`} />
+                  <input type="date" value={form.dateOfBirth} onChange={(e) => setForm(p => ({ ...p, dateOfBirth: e.target.value }))} className={`${inputCls} w-full`} />
                 </div>
-                <input placeholder="Profile Photo URL (optional)" value={form.profilePhotoUrl}
-                  onChange={(e) => setForm(p => ({ ...p, profilePhotoUrl: e.target.value }))} className={inputCls} />
-                {form.profilePhotoUrl && (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={form.profilePhotoUrl} alt="Preview" className="w-16 h-16 rounded-full object-cover border border-[#2F4E73]"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }} />
-                )}
+                <input placeholder="Profile Photo URL (optional)" value={form.profilePhotoUrl} onChange={(e) => setForm(p => ({ ...p, profilePhotoUrl: e.target.value }))} className={inputCls} />
               </div>
               <div className="flex gap-3 mt-5">
                 <button onClick={() => { setShowModal(false); setError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
-                <button onClick={handleCreate} disabled={submitting || !form.batchId || !form.registrationNumber || !form.rollNumber || !form.firstName || !form.lastName} className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Creating...' : 'Create'}</button>
+                <button onClick={handleCreate} disabled={submitting || !form.batchId || !form.registrationNumber || !form.rollNumber || !form.firstName || !form.lastName}
+                  className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{submitting ? 'Creating...' : 'Create'}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Edit Modal */}
+        {editModal && editStudent && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+            <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 w-full max-w-md">
+              <h2 className="text-white font-bold text-lg mb-1">Edit Student</h2>
+              <p className="text-[#90A6BD] text-sm mb-4">{editStudent.first_name} {editStudent.last_name} · {editStudent.roll_number}</p>
+              {editError && <p className="text-[#F87171] text-sm mb-3">{editError}</p>}
+              <div className="flex flex-col gap-3">
+                <input placeholder="Email" value={editForm.email} onChange={(e) => setEditForm(p => ({ ...p, email: e.target.value }))} className={inputCls} />
+                <input placeholder="Phone" value={editForm.phone} onChange={(e) => setEditForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} />
+                <select value={editForm.student_status} onChange={(e) => setEditForm(p => ({ ...p, student_status: e.target.value }))} className={inputCls}>
+                  {['ACTIVE','INACTIVE','GRADUATED','DROPPED'].map(s => <option key={s}>{s}</option>)}
+                </select>
+                <input placeholder="Profile Photo URL" value={editForm.profile_photo_url} onChange={(e) => setEditForm(p => ({ ...p, profile_photo_url: e.target.value }))} className={inputCls} />
+              </div>
+              <div className="flex gap-3 mt-5">
+                <button onClick={() => { setEditModal(false); setEditError('') }} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+                <button onClick={handleEdit} disabled={editSubmitting}
+                  className="flex-1 bg-[#F59E0B] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{editSubmitting ? 'Saving...' : 'Save Changes'}</button>
               </div>
             </div>
           </div>
