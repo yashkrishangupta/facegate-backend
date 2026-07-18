@@ -835,6 +835,23 @@ function CalendarTab() {
     } catch { setError('Network error') }
   }
 
+  const [editItem, setEditItem] = useState<any | null>(null)
+  const [editForm, setEditForm] = useState({ event_type: EVENT_TYPES[0], event_name: '', is_working_day: true })
+
+  const openEdit = (c: any) => {
+    setEditItem(c)
+    setEditForm({ event_type: c.event_type, event_name: c.event_name || '', is_working_day: c.is_working_day })
+  }
+
+  const handleEdit = async () => {
+    try {
+      const res = await apiFetch(`/academic-calendar/${editItem.calendar_id}`, { method: 'PUT', body: JSON.stringify(editForm) })
+      const json = await res.json()
+      if (!res.ok || !json.success) return
+      setEditItem(null); fetchItems()
+    } catch {}
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this calendar entry?')) return
     await apiFetch(`/academic-calendar/${id}`, { method: 'DELETE' }).catch(() => {})
@@ -852,7 +869,10 @@ function CalendarTab() {
             <div key={c.calendar_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-5">
               <p className="text-white font-bold">{new Date(c.calendar_date).toLocaleDateString()} — {c.event_type}</p>
               <p className="text-[#90A6BD] text-sm mt-1">{c.event_name || (c.is_working_day ? 'Working day' : 'Non-working day')} · AY {c.academic_year}, Sem {c.semester}</p>
-              <button onClick={() => handleDelete(c.calendar_id)} className="mt-3 text-[#F87171] text-sm hover:text-white">Delete</button>
+              <div className="flex gap-4 mt-3">
+                <button onClick={() => openEdit(c)} className="text-[#F59E0B] text-sm hover:text-white">Edit</button>
+                <button onClick={() => handleDelete(c.calendar_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button>
+              </div>
             </div>
           ))}
         </div>
@@ -874,6 +894,20 @@ function CalendarTab() {
           <div className="flex gap-3 mt-5">
             <button onClick={() => setShowModal(false)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
             <button onClick={handleCreate} className="flex-1 bg-[#4ADE80] text-black font-semibold rounded-lg py-2 text-sm">Create</button>
+          </div>
+        </Modal>
+      )}
+      {editItem && (
+        <Modal title="Edit Calendar Entry" onClose={() => setEditItem(null)}>
+          <div className="flex flex-col gap-3">
+            <select value={editForm.event_type} onChange={(e) => setEditForm(p => ({ ...p, event_type: e.target.value, is_working_day: e.target.value === 'WORKING_DAY' }))} className={inputCls}>
+              {EVENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <input placeholder="Event Name (optional)" value={editForm.event_name} onChange={(e) => setEditForm(p => ({ ...p, event_name: e.target.value }))} className={inputCls} />
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setEditItem(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleEdit} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm">Save</button>
           </div>
         </Modal>
       )}
