@@ -25,6 +25,7 @@ import programRoutes from "./routes/programs";
 import subjectRoutes from "./routes/subjects";
 import academicCalendarRoutes from "./routes/academicCalendar";
 import changeLogRoutes from "./routes/changeLog";
+import extraPeriodRoutes from "./routes/extraPeriod";
 
 const app = express();
 
@@ -68,6 +69,7 @@ app.use("/api/v1/programs", programRoutes);
 app.use("/api/v1/subjects", subjectRoutes);
 app.use("/api/v1/academic-calendar", academicCalendarRoutes);
 app.use("/api/v1/change-log", changeLogRoutes);
+app.use("/api/v1/extra-periods", extraPeriodRoutes);
 // Error handler must be last
 app.use(errorHandler);
 
