@@ -621,14 +621,14 @@ export default function ReportsPage() {
                   {activeTab === 'student' && (
                      <div className='flex flex-col gap-1.5'>
                         <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Student ID
+                           Student ID, Roll No. or Name
                         </label>
                         <input
                            id='input-student-id'
                            type='text'
                            value={studentIdInput}
                            onChange={(e) => setStudentIdInput(e.target.value)}
-                           placeholder='e.g. 9bc18df2-84fd-...'
+                           placeholder='e.g. 2024CS01, John Doe...'
                            className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
                         />
                      </div>
