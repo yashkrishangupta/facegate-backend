@@ -111,6 +111,72 @@ export const getStudentReport = async (
 /**
  * Faculty Report
  */
+export const getBatchReport = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    try {
+        const batchId = req.params.batchId as string;
+        const { from, to } = req.query as Record<string, string>;
+
+        const report = await ReportService.getBatchReport(batchId, from, to);
+
+        res.status(200).json({
+            success: true,
+            data: report
+        });
+    } catch (error: any) {
+        res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+export const getSubjectReport = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    try {
+        const subjectId = req.params.subjectId as string;
+        const { from, to } = req.query as Record<string, string>;
+
+        const report = await ReportService.getSubjectReport(subjectId, from, to);
+
+        res.status(200).json({
+            success: true,
+            data: report
+        });
+    } catch (error: any) {
+        res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
+export const getRoomReport = async (
+    req: Request,
+    res: Response
+): Promise<void> => {
+    try {
+        const roomId = req.params.roomId as string;
+        const { from, to } = req.query as Record<string, string>;
+
+        const report = await ReportService.getRoomReport(roomId, from, to);
+
+        res.status(200).json({
+            success: true,
+            data: report
+        });
+    } catch (error: any) {
+        res.status(400).json({
+            success: false,
+            message: error.message
+        });
+    }
+};
+
 export const getFacultyReport = async (
     req: Request,
     res: Response
