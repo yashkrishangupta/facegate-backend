@@ -87,9 +87,10 @@ export const getStudentReport = async (
     try {
 
         const studentId = req.params.studentId as string;
+        const { from, to, semester } = req.query as Record<string, string>;
 
         const report =
-            await ReportService.getStudentReport(studentId);
+            await ReportService.getStudentReport(studentId, from, to, semester);
 
         res.status(200).json({
             success: true,

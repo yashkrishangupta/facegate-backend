@@ -27,9 +27,12 @@ export const getDailyReport = async (date?: string, facultyId?: string | null) =
  * Student Report
  */
 export const getStudentReport = async (
-    studentId: string
+    studentId: string,
+    from?: string,
+    to?: string,
+    semester?: string
 ) => {
-    return await ReportRepository.getStudentReport(studentId);
+    return await ReportRepository.getStudentReport(studentId, from, to, semester);
 };
 
 /**

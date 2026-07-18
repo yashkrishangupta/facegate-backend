@@ -17,11 +17,13 @@ export const getExportRows = async (
     from?: string,
     to?: string
 ) => {
-    const idColumn = reportType === "student" ? "a.student_id"
-        : reportType === "batch" ? "s.batch_id"
-        : "t.subject_id";
+    const idCondition = reportType === "student" 
+        ? "(a.student_id::text = $1 OR s.roll_number ILIKE $1 OR s.registration_number ILIKE $1 OR (s.first_name || ' ' || s.last_name) ILIKE $1)"
+        : reportType === "batch" 
+        ? "s.batch_id = $1"
+        : "t.subject_id = $1";
 
-    const conditions = [`${idColumn} = $1`, "a.is_active = TRUE"];
+    const conditions = [idCondition, "a.is_active = TRUE"];
     const values: any[] = [id];
 
     if (from) { values.push(from); conditions.push(`a.attendance_time::date >= $${values.length}`); }
@@ -100,30 +102,62 @@ export const getDailyReport = async (date?: string, facultyId?: string | null) =
     };
 };
 
-export const getStudentReport = async (studentId: string) => {
+export const getStudentReport = async (studentSearch: string, from?: string, to?: string, semester?: string) => {
 
     const studentResult = await pool.query(
-        `SELECT s.first_name || ' ' || s.last_name AS student_name, b.batch_code AS batch
+        `SELECT s.student_id, s.first_name || ' ' || s.last_name AS student_name, b.batch_code AS batch
          FROM student s
          JOIN batch b ON b.batch_id = s.batch_id
-         WHERE s.student_id = $1`,
-        [studentId]
+         WHERE s.student_id::text = $1
+            OR s.roll_number ILIKE $1
+            OR s.registration_number ILIKE $1
+            OR (s.first_name || ' ' || s.last_name) ILIKE $1
+         LIMIT 1`,
+        [studentSearch]
     );
 
+    if (studentResult.rows.length === 0) {
+        throw new Error("Student not found");
+    }
+
     const student = studentResult.rows[0];
+    const resolvedStudentId = student.student_id;
+
+    const overallConditions = ["a.student_id = $1", "a.is_active = TRUE"];
+    const overallValues: any[] = [resolvedStudentId];
+
+    let overallJoinClause = "";
+    if (semester) {
+        overallJoinClause = `JOIN attendance_session ases ON ases.attendance_session_id = a.attendance_session_id
+                             JOIN timetable t ON t.timetable_id = ases.timetable_id
+                             JOIN subject sub ON sub.subject_id = t.subject_id`;
+        overallValues.push(semester);
+        overallConditions.push(`sub.semester = $${overallValues.length}`);
+    }
+
+    if (from) { overallValues.push(from); overallConditions.push(`a.attendance_time::date >= $${overallValues.length}`); }
+    if (to) { overallValues.push(to); overallConditions.push(`a.attendance_time::date <= $${overallValues.length}`); }
 
     const overallResult = await pool.query(
         `SELECT
             COUNT(*) AS total_classes,
-            COUNT(*) FILTER (WHERE attendance_status = 'PRESENT') AS attended
-         FROM attendance
-         WHERE student_id = $1 AND is_active = TRUE`,
-        [studentId]
+            COUNT(*) FILTER (WHERE a.attendance_status = 'PRESENT') AS attended
+         FROM attendance a
+         ${overallJoinClause}
+         WHERE ${overallConditions.join(" AND ")}`,
+        overallValues
     );
 
     const overall = overallResult.rows[0];
     const totalClasses = Number(overall.total_classes);
     const totalPresent = Number(overall.attended);
+
+    const subjectConditions = ["a.student_id = $1", "a.is_active = TRUE"];
+    const subjectValues: any[] = [resolvedStudentId];
+
+    if (from) { subjectValues.push(from); subjectConditions.push(`a.attendance_time::date >= $${subjectValues.length}`); }
+    if (to) { subjectValues.push(to); subjectConditions.push(`a.attendance_time::date <= $${subjectValues.length}`); }
+    if (semester) { subjectValues.push(semester); subjectConditions.push(`sub.semester = $${subjectValues.length}`); }
 
     const subjectsResult = await pool.query(
         `SELECT
@@ -136,10 +170,10 @@ export const getStudentReport = async (studentId: string) => {
          JOIN attendance_session ases ON ases.attendance_session_id = a.attendance_session_id
          JOIN timetable t ON t.timetable_id = ases.timetable_id
          JOIN subject sub ON sub.subject_id = t.subject_id
-         WHERE a.student_id = $1 AND a.is_active = TRUE
+         WHERE ${subjectConditions.join(" AND ")}
          GROUP BY sub.subject_id, sub.subject_code, sub.subject_name
          ORDER BY sub.subject_name`,
-        [studentId]
+        subjectValues
     );
 
     const subjects = subjectsResult.rows.map((row) => {
@@ -156,7 +190,7 @@ export const getStudentReport = async (studentId: string) => {
     });
 
     return {
-        studentId,
+        studentId: resolvedStudentId,
         studentName: student?.student_name ?? null,
         batch: student?.batch ?? null,
         totalClasses,
