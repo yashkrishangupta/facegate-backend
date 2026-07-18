@@ -20,11 +20,7 @@ export default function MasterDataPage() {
   const router = useRouter()
   const [tab, setTab] = useState<Tab>('departments')
   const isSuperAdmin = getAdmin()?.role === 'SUPER_ADMIN'
-
-  useEffect(() => {
-    if (!isLoggedIn()) router.push('/login')
-  }, [])
-
+  useEffect(() => { if (!isLoggedIn()) router.push('/login') }, [])
   return (
     <main className="min-h-screen bg-[#0D1727] text-white p-8">
       <div className="max-w-6xl mx-auto">
@@ -69,8 +65,10 @@ function DepartmentsTab() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState<any | null>(null)
   const [error, setError] = useState('')
   const [form, setForm] = useState({ department_code: '', department_name: '', hod_name: '', email: '', phone: '' })
+  const [editForm, setEditForm] = useState({ department_name: '', hod_name: '', email: '' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -91,6 +89,28 @@ function DepartmentsTab() {
     } catch { setError('Network error') }
   }
 
+  const openEdit = (d: any) => {
+    setEditItem(d)
+    setEditForm({ department_name: d.department_name, hod_name: d.hod_name || '', email: d.email || '' })
+    setError('')
+  }
+
+  const handleEdit = async () => {
+    setError('')
+    try {
+      const res = await apiFetch(`/departments/${editItem.department_id}`, { method: 'PUT', body: JSON.stringify(editForm) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to update'); return }
+      setEditItem(null); fetchItems()
+    } catch { setError('Network error') }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deactivate this department?')) return
+    await apiFetch(`/departments/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetchItems()
+  }
+
   return (
     <div>
       <div className="flex justify-end mb-4">
@@ -102,6 +122,10 @@ function DepartmentsTab() {
             <div key={d.department_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-5">
               <p className="text-white font-bold">{d.department_code} — {d.department_name}</p>
               <p className="text-[#90A6BD] text-sm mt-1">HOD: {d.hod_name || '—'}</p>
+              <div className="flex gap-4 mt-3">
+                <button onClick={() => openEdit(d)} className="text-[#F59E0B] text-sm hover:text-white">Edit</button>
+                <button onClick={() => handleDelete(d.department_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button>
+              </div>
             </div>
           ))}
         </div>
@@ -121,6 +145,20 @@ function DepartmentsTab() {
           </div>
         </Modal>
       )}
+      {editItem && (
+        <Modal title="Edit Department" onClose={() => setEditItem(null)}>
+          {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
+          <div className="flex flex-col gap-3">
+            <input placeholder="Department Name" value={editForm.department_name} onChange={(e) => setEditForm(p => ({ ...p, department_name: e.target.value }))} className={inputCls} />
+            <input placeholder="HOD Name" value={editForm.hod_name} onChange={(e) => setEditForm(p => ({ ...p, hod_name: e.target.value }))} className={inputCls} />
+            <input placeholder="Email" value={editForm.email} onChange={(e) => setEditForm(p => ({ ...p, email: e.target.value }))} className={inputCls} />
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setEditItem(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleEdit} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm">Save</button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -129,8 +167,10 @@ function ProgramsTab() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState<any | null>(null)
   const [error, setError] = useState('')
   const [form, setForm] = useState({ program_code: '', program_name: '', degree_type: DEGREE_TYPES[0], duration_years: '4' })
+  const [editForm, setEditForm] = useState({ program_name: '', degree_type: DEGREE_TYPES[0], duration_years: '4' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -142,16 +182,35 @@ function ProgramsTab() {
   const handleCreate = async () => {
     setError('')
     try {
-      const res = await apiFetch('/programs', {
-        method: 'POST',
-        body: JSON.stringify({ ...form, duration_years: Number(form.duration_years) })
-      })
+      const res = await apiFetch('/programs', { method: 'POST', body: JSON.stringify({ ...form, duration_years: Number(form.duration_years) }) })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to create'); return }
       setShowModal(false)
       setForm({ program_code: '', program_name: '', degree_type: DEGREE_TYPES[0], duration_years: '4' })
       fetchItems()
     } catch { setError('Network error') }
+  }
+
+  const openEdit = (p: any) => {
+    setEditItem(p)
+    setEditForm({ program_name: p.program_name, degree_type: p.degree_type, duration_years: String(p.duration_years) })
+    setError('')
+  }
+
+  const handleEdit = async () => {
+    setError('')
+    try {
+      const res = await apiFetch(`/programs/${editItem.program_id}`, { method: 'PUT', body: JSON.stringify({ ...editForm, duration_years: Number(editForm.duration_years) }) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to update'); return }
+      setEditItem(null); fetchItems()
+    } catch { setError('Network error') }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deactivate this program?')) return
+    await apiFetch(`/programs/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetchItems()
   }
 
   return (
@@ -168,6 +227,10 @@ function ProgramsTab() {
             <div key={p.program_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-5">
               <p className="text-white font-bold">{p.program_code} — {p.program_name}</p>
               <p className="text-[#90A6BD] text-sm mt-1">{p.degree_type} · {p.duration_years} years</p>
+              <div className="flex gap-4 mt-3">
+                <button onClick={() => openEdit(p)} className="text-[#F59E0B] text-sm hover:text-white">Edit</button>
+                <button onClick={() => handleDelete(p.program_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button>
+              </div>
             </div>
           ))}
         </div>
@@ -189,6 +252,22 @@ function ProgramsTab() {
           </div>
         </Modal>
       )}
+      {editItem && (
+        <Modal title="Edit Program" onClose={() => setEditItem(null)}>
+          {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
+          <div className="flex flex-col gap-3">
+            <input placeholder="Program Name" value={editForm.program_name} onChange={(e) => setEditForm(p => ({ ...p, program_name: e.target.value }))} className={inputCls} />
+            <select value={editForm.degree_type} onChange={(e) => setEditForm(p => ({ ...p, degree_type: e.target.value }))} className={inputCls}>
+              {DEGREE_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <input placeholder="Duration (years)" type="number" value={editForm.duration_years} onChange={(e) => setEditForm(p => ({ ...p, duration_years: e.target.value }))} className={inputCls} />
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setEditItem(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleEdit} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm">Save</button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -200,12 +279,11 @@ function BatchesTab() {
   const [faculty, setFaculty] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState<any | null>(null)
   const [error, setError] = useState('')
   const [filters, setFilters] = useState({ academic_year: '', program_id: '', semester: '', department_id: '' })
-  const [form, setForm] = useState({
-    department_id: '', batch_code: '', program_id: '', academic_year: '',
-    semester: '1', section: '', strength: '60', batch_advisor_id: ''
-  })
+  const [form, setForm] = useState({ department_id: '', batch_code: '', program_id: '', academic_year: '', semester: '1', section: '', strength: '60', batch_advisor_id: '' })
+  const [editForm, setEditForm] = useState({ batch_code: '', strength: '60', batch_advisor_id: '' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -225,20 +303,33 @@ function BatchesTab() {
   const handleCreate = async () => {
     setError('')
     try {
-      const res = await apiFetch('/batches', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...form,
-          semester: Number(form.semester),
-          strength: Number(form.strength),
-          batch_advisor_id: form.batch_advisor_id || undefined
-        })
-      })
+      const res = await apiFetch('/batches', { method: 'POST', body: JSON.stringify({ ...form, semester: Number(form.semester), strength: Number(form.strength), batch_advisor_id: form.batch_advisor_id || undefined }) })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to create'); return }
-      setShowModal(false)
-      fetchItems()
+      setShowModal(false); fetchItems()
     } catch { setError('Network error') }
+  }
+
+  const openEdit = (b: any) => {
+    setEditItem(b)
+    setEditForm({ batch_code: b.batch_code, strength: String(b.strength || 60), batch_advisor_id: b.batch_advisor_id || '' })
+    setError('')
+  }
+
+  const handleEdit = async () => {
+    setError('')
+    try {
+      const res = await apiFetch(`/batches/${editItem.batch_id}`, { method: 'PUT', body: JSON.stringify({ ...editForm, strength: Number(editForm.strength), batch_advisor_id: editForm.batch_advisor_id || undefined }) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to update'); return }
+      setEditItem(null); fetchItems()
+    } catch { setError('Network error') }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deactivate this batch?')) return
+    await apiFetch(`/batches/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetchItems()
   }
 
   return (
@@ -277,6 +368,10 @@ function BatchesTab() {
               <p className="text-white font-bold">{b.batch_code}</p>
               <p className="text-[#90A6BD] text-sm mt-1">{b.program_name} · {b.academic_year} · Sem {b.semester}{b.section ? ` · Sec ${b.section}` : ''}</p>
               <p className="text-[#4A6080] text-xs mt-1">{b.department_name}{b.advisor_name ? ` · Advisor: ${b.advisor_name}` : ''}</p>
+              <div className="flex gap-4 mt-3">
+                <button onClick={() => openEdit(b)} className="text-[#F59E0B] text-sm hover:text-white">Edit</button>
+                <button onClick={() => handleDelete(b.batch_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button>
+              </div>
             </div>
           ))}
         </div>
@@ -312,6 +407,23 @@ function BatchesTab() {
           </div>
         </Modal>
       )}
+      {editItem && (
+        <Modal title="Edit Batch" onClose={() => setEditItem(null)}>
+          {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
+          <div className="flex flex-col gap-3">
+            <input placeholder="Batch Code" value={editForm.batch_code} onChange={(e) => setEditForm(p => ({ ...p, batch_code: e.target.value }))} className={inputCls} />
+            <input placeholder="Strength" type="number" value={editForm.strength} onChange={(e) => setEditForm(p => ({ ...p, strength: e.target.value }))} className={inputCls} />
+            <select value={editForm.batch_advisor_id} onChange={(e) => setEditForm(p => ({ ...p, batch_advisor_id: e.target.value }))} className={inputCls}>
+              <option value="">No Advisor</option>
+              {faculty.map((f: any) => <option key={f.faculty_id} value={f.faculty_id}>{f.first_name} {f.last_name}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setEditItem(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleEdit} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm">Save</button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -322,13 +434,11 @@ function SubjectsTab() {
   const [programs, setPrograms] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [editItem, setEditItem] = useState<any | null>(null)
   const [error, setError] = useState('')
   const [filters, setFilters] = useState({ program_id: '', semester: '' })
-  const [form, setForm] = useState({
-    department_id: '', subject_code: '', subject_name: '', program_id: '',
-    semester: '1', credits: '4', subject_type: SUBJECT_TYPES[0],
-    course_category: COURSE_CATEGORIES[0], contact_hours_per_week: '4'
-  })
+  const [form, setForm] = useState({ department_id: '', subject_code: '', subject_name: '', program_id: '', semester: '1', credits: '4', subject_type: SUBJECT_TYPES[0], course_category: COURSE_CATEGORIES[0], contact_hours_per_week: '4' })
+  const [editForm, setEditForm] = useState({ subject_name: '', credits: '4', subject_type: SUBJECT_TYPES[0], course_category: COURSE_CATEGORIES[0] })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -351,9 +461,30 @@ function SubjectsTab() {
       const res = await apiFetch('/subjects', { method: 'POST', body: JSON.stringify(form) })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to create'); return }
-      setShowModal(false)
-      fetchItems()
+      setShowModal(false); fetchItems()
     } catch { setError('Network error') }
+  }
+
+  const openEdit = (s: any) => {
+    setEditItem(s)
+    setEditForm({ subject_name: s.subject_name, credits: String(s.credits), subject_type: s.subject_type, course_category: s.course_category })
+    setError('')
+  }
+
+  const handleEdit = async () => {
+    setError('')
+    try {
+      const res = await apiFetch(`/subjects/${editItem.subject_id}`, { method: 'PUT', body: JSON.stringify(editForm) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setError(json.message || 'Failed to update'); return }
+      setEditItem(null); fetchItems()
+    } catch { setError('Network error') }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Deactivate this subject?')) return
+    await apiFetch(`/subjects/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetchItems()
   }
 
   return (
@@ -377,6 +508,10 @@ function SubjectsTab() {
             <div key={s.subject_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-5">
               <p className="text-white font-bold">{s.subject_code} — {s.subject_name}</p>
               <p className="text-[#90A6BD] text-sm mt-1">{s.program_name} · Sem {s.semester} · {s.subject_type} · {s.credits} credits</p>
+              <div className="flex gap-4 mt-3">
+                <button onClick={() => openEdit(s)} className="text-[#F59E0B] text-sm hover:text-white">Edit</button>
+                <button onClick={() => handleDelete(s.subject_id)} className="text-[#F87171] text-sm hover:text-white">Delete</button>
+              </div>
             </div>
           ))}
         </div>
@@ -414,6 +549,25 @@ function SubjectsTab() {
           </div>
         </Modal>
       )}
+      {editItem && (
+        <Modal title="Edit Subject" onClose={() => setEditItem(null)}>
+          {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
+          <div className="flex flex-col gap-3">
+            <input placeholder="Subject Name" value={editForm.subject_name} onChange={(e) => setEditForm(p => ({ ...p, subject_name: e.target.value }))} className={inputCls} />
+            <input placeholder="Credits" type="number" value={editForm.credits} onChange={(e) => setEditForm(p => ({ ...p, credits: e.target.value }))} className={inputCls} />
+            <select value={editForm.subject_type} onChange={(e) => setEditForm(p => ({ ...p, subject_type: e.target.value }))} className={inputCls}>
+              {SUBJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <select value={editForm.course_category} onChange={(e) => setEditForm(p => ({ ...p, course_category: e.target.value }))} className={inputCls}>
+              {COURSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setEditItem(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleEdit} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm">Save</button>
+          </div>
+        </Modal>
+      )}
     </div>
   )
 }
@@ -422,23 +576,14 @@ function FacultyTab() {
   const admin = getAdmin()
   const canManage = admin?.role === 'SUPER_ADMIN' || admin?.role === 'ADMIN'
   const isSuperAdmin = admin?.role === 'SUPER_ADMIN'
-
   const [faculty, setFaculty] = useState<any[]>([])
   const [departments, setDepartments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({
-    department_id: '', employee_id: '', first_name: '', last_name: '',
-    email: '', phone: '', designation: DESIGNATIONS[0], password: ''
-  })
+  const [form, setForm] = useState({ department_id: '', employee_id: '', first_name: '', last_name: '', email: '', phone: '', designation: DESIGNATIONS[0], password: '' })
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [createdUsername, setCreatedUsername] = useState('')
-
-  // Password reset — SUPER_ADMIN only, no current password needed (this
-  // is a reset, not a self-service change). Nobody, including
-  // SUPER_ADMIN, can ever view an existing password — bcrypt hashing is
-  // one-way and the plaintext is never stored anywhere, by design.
   const [resetTarget, setResetTarget] = useState<any | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [resetError, setResetError] = useState('')
@@ -458,8 +603,7 @@ function FacultyTab() {
       const res = await apiFetch('/faculty', { method: 'POST', body: JSON.stringify(form) })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to create faculty'); return }
-      setCreatedUsername(json.data.account.username)
-      fetchFaculty()
+      setCreatedUsername(json.data.account.username); fetchFaculty()
     } catch { setError('Network error') } finally { setSubmitting(false) }
   }
 
@@ -478,10 +622,7 @@ function FacultyTab() {
     if (!resetTarget?.admin_id) return
     setResetError(''); setResetting(true)
     try {
-      const res = await apiFetch(`/admin/${resetTarget.admin_id}/security`, {
-        method: 'PUT',
-        body: JSON.stringify({ newPassword })
-      })
+      const res = await apiFetch(`/admin/${resetTarget.admin_id}/security`, { method: 'PUT', body: JSON.stringify({ newPassword }) })
       const json = await res.json()
       if (!res.ok || !json.success) { setResetError(json.message || 'Failed to reset password'); return }
       setResetTarget(null); setNewPassword('')
@@ -492,9 +633,7 @@ function FacultyTab() {
     <div>
       <div className="flex justify-between items-center mb-4">
         <p className="text-[#90A6BD] text-sm">Creating a faculty member automatically creates their login — you set the initial password, they can change it later.</p>
-        {canManage && (
-          <button onClick={() => setShowModal(true)} className="bg-[#4ADE80] text-black font-bold px-5 py-2 rounded-xl text-sm whitespace-nowrap">+ New Faculty</button>
-        )}
+        {canManage && <button onClick={() => setShowModal(true)} className="bg-[#4ADE80] text-black font-bold px-5 py-2 rounded-xl text-sm whitespace-nowrap">+ New Faculty</button>}
       </div>
       {loading ? <p className="text-[#90A6BD]">Loading...</p> : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -505,9 +644,7 @@ function FacultyTab() {
                   <p className="text-white font-bold">{f.first_name} {f.last_name}</p>
                   <p className="text-[#90A6BD] text-sm">{f.designation} · {f.department_name}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${f.account_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A1A] text-[#F87171]'}`}>
-                  {f.account_status || 'NO LOGIN'}
-                </span>
+                <span className={`text-xs px-2 py-1 rounded-full ${f.account_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A1A] text-[#F87171]'}`}>{f.account_status || 'NO LOGIN'}</span>
               </div>
               <div className="text-sm text-[#90A6BD] space-y-1 mt-2">
                 <p>Username: <span className="text-white font-mono">{f.username || '—'}</span></p>
@@ -516,9 +653,7 @@ function FacultyTab() {
               {canManage && (
                 <div className="flex gap-4 mt-4">
                   <button onClick={() => handleDeactivate(f.faculty_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
-                  {isSuperAdmin && f.admin_id && (
-                    <button onClick={() => { setResetTarget(f); setNewPassword(''); setResetError('') }} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Reset Password</button>
-                  )}
+                  {isSuperAdmin && f.admin_id && <button onClick={() => { setResetTarget(f); setNewPassword(''); setResetError('') }} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Reset Password</button>}
                 </div>
               )}
             </div>
@@ -561,19 +696,12 @@ function FacultyTab() {
       )}
       {resetTarget && (
         <Modal title={`Reset Password — ${resetTarget.first_name} ${resetTarget.last_name}`} onClose={() => setResetTarget(null)}>
-          <p className="text-[#90A6BD] text-sm mb-4">
-            No current password needed — this is a direct reset, only SUPER_ADMIN can do this.
-            Share the new password with {resetTarget.first_name} directly; they can change it themselves afterward.
-          </p>
+          <p className="text-[#90A6BD] text-sm mb-4">No current password needed — this is a direct reset, only SUPER_ADMIN can do this.</p>
           {resetError && <p className="text-[#F87171] text-sm mb-3">{resetError}</p>}
-          <input placeholder="New Password (min 8 chars)" type="password" value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)} className={`w-full ${inputCls}`} />
+          <input placeholder="New Password (min 8 chars)" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={`w-full ${inputCls}`} />
           <div className="flex gap-3 mt-5">
             <button onClick={() => setResetTarget(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
-            <button onClick={handleResetPassword} disabled={resetting || newPassword.length < 8}
-              className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">
-              {resetting ? 'Resetting...' : 'Reset Password'}
-            </button>
+            <button onClick={handleResetPassword} disabled={resetting || newPassword.length < 8} className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{resetting ? 'Resetting...' : 'Reset Password'}</button>
           </div>
         </Modal>
       )}
@@ -588,15 +716,7 @@ function AdminsTab() {
   const [error, setError] = useState('')
   const [listError, setListError] = useState('')
   const [createdUsername, setCreatedUsername] = useState('')
-  const [form, setForm] = useState({
-    employee_id: '', first_name: '', last_name: '', email: '', phone: '',
-    role: 'ADMIN', password: ''
-  })
-  // POST /admin and DELETE /admin/:id both require requireSuperAdmin on the
-  // backend (see routes/admin.ts) — a plain ADMIN hitting either previously
-  // got a silent 403 here (Create/Deactivate rendered unconditionally,
-  // errors swallowed by `.catch(() => {})`), which looked exactly like
-  // "the delete button doesn't do anything."
+  const [form, setForm] = useState({ employee_id: '', first_name: '', last_name: '', email: '', phone: '', role: 'ADMIN', password: '' })
   const isSuperAdmin = getAdmin()?.role === 'SUPER_ADMIN'
 
   const fetchItems = async () => {
@@ -612,8 +732,7 @@ function AdminsTab() {
       const res = await apiFetch('/admin', { method: 'POST', body: JSON.stringify(form) })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to create admin'); return }
-      setCreatedUsername(json.data.username)
-      fetchItems()
+      setCreatedUsername(json.data.username); fetchItems()
     } catch { setError('Network error') }
   }
 
@@ -629,16 +748,14 @@ function AdminsTab() {
       const res = await apiFetch(`/admin/${id}`, { method: 'DELETE' })
       const json = await res.json()
       if (!res.ok || !json.success) { setListError(json.message || 'Failed to deactivate account'); return }
-    } catch { setListError('Network error — is the API server running?') }
+    } catch { setListError('Network error') }
     fetchItems()
   }
 
   return (
     <div>
       <div className="flex justify-between items-center mb-4">
-        <p className="text-[#90A6BD] text-sm">
-          Direct account creation for ADMIN/SUPER_ADMIN/VIEWER roles — use the Faculty tab instead for FACULTY accounts, since those also need a teaching record.
-        </p>
+        <p className="text-[#90A6BD] text-sm">Direct account creation for ADMIN/SUPER_ADMIN/VIEWER roles — use the Faculty tab instead for FACULTY accounts.</p>
         {isSuperAdmin && <button onClick={() => setShowModal(true)} className="bg-[#4ADE80] text-black font-bold px-5 py-2 rounded-xl text-sm whitespace-nowrap">+ New Admin</button>}
       </div>
       {listError && <p className="text-[#F87171] text-sm mb-4">{listError}</p>}
@@ -651,9 +768,7 @@ function AdminsTab() {
                   <p className="text-white font-bold">{a.first_name} {a.last_name}</p>
                   <p className="text-[#90A6BD] text-sm">{a.username} · {a.role}</p>
                 </div>
-                <span className={`text-xs px-2 py-1 rounded-full ${a.account_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A1A] text-[#F87171]'}`}>
-                  {a.account_status}
-                </span>
+                <span className={`text-xs px-2 py-1 rounded-full ${a.account_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A1A] text-[#F87171]'}`}>{a.account_status}</span>
               </div>
               {isSuperAdmin && <button onClick={() => handleDeactivate(a.admin_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>}
             </div>
@@ -701,10 +816,7 @@ function CalendarTab() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    calendar_date: '', academic_year: '', semester: '1', is_working_day: true,
-    event_type: EVENT_TYPES[0], event_name: ''
-  })
+  const [form, setForm] = useState({ calendar_date: '', academic_year: '', semester: '1', is_working_day: true, event_type: EVENT_TYPES[0], event_name: '' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -719,9 +831,14 @@ function CalendarTab() {
       const res = await apiFetch('/academic-calendar', { method: 'POST', body: JSON.stringify(form) })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to create'); return }
-      setShowModal(false)
-      fetchItems()
+      setShowModal(false); fetchItems()
     } catch { setError('Network error') }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this calendar entry?')) return
+    await apiFetch(`/academic-calendar/${id}`, { method: 'DELETE' }).catch(() => {})
+    fetchItems()
   }
 
   return (
@@ -735,6 +852,7 @@ function CalendarTab() {
             <div key={c.calendar_id} className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-5">
               <p className="text-white font-bold">{new Date(c.calendar_date).toLocaleDateString()} — {c.event_type}</p>
               <p className="text-[#90A6BD] text-sm mt-1">{c.event_name || (c.is_working_day ? 'Working day' : 'Non-working day')} · AY {c.academic_year}, Sem {c.semester}</p>
+              <button onClick={() => handleDelete(c.calendar_id)} className="mt-3 text-[#F87171] text-sm hover:text-white">Delete</button>
             </div>
           ))}
         </div>
