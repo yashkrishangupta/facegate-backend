@@ -164,13 +164,46 @@ const pullForRoom = async (roomId: string, since?: string) => {
         conflictParams
     );
 
+    // Auth users — for on-device admin/faculty login (Android app: Admin Mode
+    // gate + "start my period" gate). Scoped like everything else here:
+    // every active ADMIN/SUPER_ADMIN (they can override any period in any
+    // room) plus only the FACULTY accounts who actually teach a period in
+    // *this* room (matches "sync only the faculty whose period is on this
+    // device," not the whole institution's faculty list).
+    //
+    // password_hash is a bcrypt hash (see AdminRepository — same one used
+    // for website login), never the plaintext password. This does mean a
+    // physically-compromised device carries those hashes; that trade-off is
+    // deliberate here since devices are mostly offline and can't do a live
+    // server-side check at the moment someone taps "Start" — see the
+    // Android-side PasswordVerifier's doc comment for the fuller reasoning.
+    const authSinceClause = since ? "AND au.updated_at > $2" : "";
+    const authParams = since ? [roomId, since] : [roomId];
+
+    const authUsers = await pool.query(
+        `SELECT au.admin_id, au.employee_id, au.first_name, au.last_name,
+                au.role, au.password_hash, au.faculty_id, au.updated_at
+         FROM admin_user au
+         WHERE au.is_active = TRUE AND au.account_status = 'ACTIVE'
+           AND (
+                au.role IN ('SUPER_ADMIN', 'ADMIN')
+                OR au.faculty_id IN (
+                    SELECT DISTINCT faculty_id FROM timetable
+                    WHERE room_id = $1 AND is_active = TRUE
+                )
+           )
+           ${authSinceClause}`,
+        authParams
+    );
+
     return {
         timetable: timetable.rows,
         students: students.rows,
         holidays: holidays.rows,
         embeddings: embeddings.rows,
         conflicts: conflicts.rows,
-        attendanceUpdates: attendanceDown.rows
+        attendanceUpdates: attendanceDown.rows,
+        authUsers: authUsers.rows
     };
 };
 
@@ -183,7 +216,8 @@ export const fullSync = async (deviceId: string, roomId: string) => {
 
         await logSync(deviceId, "FULL", startedAt, {
             downloaded: data.timetable.length + data.students.length + data.holidays.length
-                + data.embeddings.length + data.conflicts.length + data.attendanceUpdates.length,
+                + data.embeddings.length + data.conflicts.length + data.attendanceUpdates.length
+                + data.authUsers.length,
             uploaded: 0,
             failed: 0
         });
@@ -205,7 +239,8 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
 
         await logSync(deviceId, "INCREMENTAL", startedAt, {
             downloaded: data.timetable.length + data.students.length + data.holidays.length
-                + data.embeddings.length + data.conflicts.length + data.attendanceUpdates.length,
+                + data.embeddings.length + data.conflicts.length + data.attendanceUpdates.length
+                + data.authUsers.length,
             uploaded: 0,
             failed: 0
         });
@@ -217,12 +252,14 @@ export const incrementalSync = async (deviceId: string, roomId: string, since?: 
             updatedEmbeddings: data.embeddings.length,
             updatedConflicts: data.conflicts.length,
             updatedAttendance: data.attendanceUpdates.length,
+            updatedAuthUsers: data.authUsers.length,
             timetable: data.timetable,
             students: data.students,
             holidays: data.holidays,
             embeddings: data.embeddings,
             conflicts: data.conflicts,
             attendanceUpdates: data.attendanceUpdates,
+            authUsers: data.authUsers,
             lastSync: new Date().toISOString()
         };
 
