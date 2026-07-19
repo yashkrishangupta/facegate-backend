@@ -3,6 +3,22 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { apiFetch, isLoggedIn, getAdmin, clearSession } from '../lib/auth'
+import Header from "../components/Header";
+import StatCard from "../components/StatCard";
+import QuickActionCard from "../components/QuickActionCard";
+
+import {
+  Users,
+  Smartphone,
+  AlertTriangle,
+  GraduationCap,
+  CalendarDays,
+  Bell,
+  Building2,
+  ClipboardList,
+  BookOpen,
+  Clock,
+} from "lucide-react";
 
 export default function Home() {
   const router = useRouter()
@@ -57,45 +73,78 @@ export default function Home() {
     { title: "Master Data", desc: "Departments, programs, batches, subjects, faculty, calendar", href: "/master-data", color: "#5DA9FF", adminOnly: true },
     { title: "Notifications", desc: "System alerts and announcements", href: "/notifications", color: "#F59E0B" },
   ]
+const icons = {
+  Students: <Users size={26} color="#5DA9FF" />,
+  Rooms: <Building2 size={26} color="#5DA9FF" />,
+  Devices: <Smartphone size={26} color="#4ADE80" />,
+  "Attendance Reports": <ClipboardList size={26} color="#A78BFA" />,
+  Today: <Clock size={26} color="#38BDF8" />,
+  Timetable: <CalendarDays size={26} color="#F59E0B" />,
+  Holidays: <CalendarDays size={26} color="#F87171" />,
+  Conflicts: <AlertTriangle size={26} color="#FB923C" />,
+  "Change Log": <BookOpen size={26} color="#90A6BD" />,
+  "Master Data": <Building2 size={26} color="#5DA9FF" />,
+  Notifications: <Bell size={26} color="#F59E0B" />,
+};
 
-  return (
-    <main className="min-h-screen bg-[#0D1727] text-white p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex justify-between items-start mb-10">
-          <div>
-            <h1 className="text-3xl font-bold text-white">FaceGate</h1>
-            <p className="text-[#90A6BD] mt-1">
-              {admin ? `Welcome, ${admin.first_name} — ${admin.role}` : 'Admin Dashboard'}
-            </p>
-          </div>
-          {admin && (
-            <button onClick={handleLogout} className="text-[#F87171] text-sm hover:text-white transition-colors">Log out</button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
-          {[
-            { label: "Total Students", value: stats.totalStudents, color: "#5DA9FF" },
-            { label: "Present Today", value: stats.presentToday, color: "#4ADE80" },
-            { label: "Active Devices", value: stats.activeDevices, color: "#F59E0B" },
-            { label: "Open Conflicts", value: stats.openConflicts, color: "#F87171" },
-          ].map((stat) => (
-            <div key={stat.label} className="bg-[#1A2436] rounded-2xl p-5 border border-[#2F4E73]">
-              <p style={{ color: stat.color }} className="text-2xl font-bold">{stat.value}</p>
-              <p className="text-[#90A6BD] text-xs mt-1 font-bold tracking-wide uppercase">{stat.label}</p>
-            </div>
-          ))}
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {tiles.filter(t => !t.adminOnly || isAdmin).map((tile) => (
-            <Link href={tile.href} key={tile.title}>
-              <div className="bg-[#1A2436] rounded-2xl p-6 border border-[#2F4E73] hover:border-[#5DA9FF] transition-all cursor-pointer">
-                <p style={{ color: tile.color }} className="text-lg font-bold">{tile.title}</p>
-                <p className="text-[#90A6BD] text-sm mt-1">{tile.desc}</p>
-              </div>
-            </Link>
-          ))}
-        </div>
-      </div>
-    </main>
-  )
+ return (
+   <main className="min-h-screen bg-[#0D1727] text-white p-8">
+     <div className="max-w-6xl mx-auto">
+
+       <Header
+         name={admin?.first_name ?? "Admin"}
+         role={admin?.role ?? ""}
+         onLogout={handleLogout}
+       />
+
+<div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+
+  <StatCard
+    title="Total Students"
+    value={stats.totalStudents}
+    color="#3B82F6"
+    icon={<GraduationCap size={28} color="#3B82F6" />}
+  />
+
+  <StatCard
+    title="Present Today"
+    value={stats.presentToday}
+    color="#22C55E"
+    icon={<Users size={28} color="#22C55E" />}
+  />
+
+  <StatCard
+    title="Active Devices"
+    value={stats.activeDevices}
+    color="#F59E0B"
+    icon={<Smartphone size={28} color="#F59E0B" />}
+  />
+
+  <StatCard
+    title="Open Conflicts"
+    value={stats.openConflicts}
+    color="#EF4444"
+    icon={<AlertTriangle size={28} color="#EF4444" />}
+  />
+
+</div>
+
+<div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+  {tiles
+    .filter((t) => !t.adminOnly || isAdmin)
+    .map((tile) => (
+      <QuickActionCard
+        key={tile.title}
+        title={tile.title}
+        description={tile.desc}
+        href={tile.href}
+        color={tile.color}
+        icon={icons[tile.title as keyof typeof icons]}
+      />
+    ))}
+</div>
+
+    </div>
+  </main>
+);
 }
