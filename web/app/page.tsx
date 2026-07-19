@@ -1,11 +1,14 @@
 'use client'
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { apiFetch, isLoggedIn, getAdmin, clearSession } from '../lib/auth'
-import Header from "../components/Header";
 import StatCard from "../components/StatCard";
 import QuickActionCard from "../components/QuickActionCard";
+import Sidebar from "../components/Sidebar";
+import Topbar from "../components/Topbar";
+import RecentActivity from "../components/RecentActivity";
+import DashboardOverview from "../components/DashboardOverview";
+import WelcomeBanner from "../components/WelcomeBanner";
 
 import {
   Users,
@@ -87,17 +90,24 @@ const icons = {
   Notifications: <Bell size={26} color="#F59E0B" />,
 };
 
- return (
-   <main className="min-h-screen bg-[#0D1727] text-white p-8">
-     <div className="max-w-6xl mx-auto">
+return (
+  <main className="min-h-screen flex bg-[#0D1727] text-white">
 
-       <Header
-         name={admin?.first_name ?? "Admin"}
-         role={admin?.role ?? ""}
-         onLogout={handleLogout}
-       />
+    <Sidebar />
 
-<div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+    <div className="flex-1 p-8">
+
+      <Topbar
+        name={admin?.first_name ?? "Admin"}
+        role={admin?.role ?? ""}
+        onLogout={handleLogout}
+      />
+<WelcomeBanner
+  name={admin?.first_name ?? "Admin"}
+/>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6 mb-10">
+
 
   <StatCard
     title="Total Students"
@@ -144,7 +154,12 @@ const icons = {
     ))}
 </div>
 
-    </div>
-  </main>
+<RecentActivity />
+
+<DashboardOverview />
+
+</div>
+
+</main>
 );
 }
