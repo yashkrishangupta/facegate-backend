@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useMemo, useCallback } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { apiFetch, isLoggedIn, getAdmin } from '../../lib/auth'
 
@@ -73,7 +74,6 @@ export default function TimetablePage() {
   const [isAdmin,   setIsAdmin]   = useState(false)
 
   // ─── View toggle: permanent timetable vs extra periods ──────────────────────
-  const [view, setView] = useState<'permanent' | 'extra'>('permanent')
 
   // ─── Shared reference data (loaded once, used by both views) ────────────────
   const [batches,  setBatches]  = useState<Batch[]>([])
@@ -109,9 +109,7 @@ export default function TimetablePage() {
 
   // ─── Extra period state ───────────────────────────────────────────────────────
   const [extraEntries,    setExtraEntries]    = useState<ExtraPeriod[]>([])
-  const [extraLoading,    setExtraLoading]    = useState(false)
-  const [extraFilterWeek, setExtraFilterWeek] = useState('')
-  const [extraFilterBatch,setExtraFilterBatch]= useState('')
+  const [extraFilterWeek, setExtraFilterWeek] = useState(new Date().toISOString().slice(0, 10))
 
   const [showExtraModal,   setShowExtraModal]   = useState(false)
   const [extraError,       setExtraError]       = useState('')
@@ -151,21 +149,20 @@ export default function TimetablePage() {
 
   // ─── Fetch: extra periods ─────────────────────────────────────────────────────
   const fetchExtraPeriods = useCallback(async () => {
-    setExtraLoading(true)
     try {
       const params = new URLSearchParams()
-      if (extraFilterWeek)  params.set('week_start_date', mondayOf(extraFilterWeek))
-      if (extraFilterBatch) params.set('batch_id',        extraFilterBatch)
+      params.set('week_start_date', mondayOf(extraFilterWeek))
       const res  = await apiFetch(`/extra-periods?${params}`)
       const json = await res.json()
       setExtraEntries(json.data || [])
-    } catch { setExtraEntries([]) } finally { setExtraLoading(false) }
-  }, [extraFilterWeek, extraFilterBatch])
+    } catch { setExtraEntries([]) }
+  }, [extraFilterWeek])
 
   // ─── Initial load ─────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!isLoggedIn()) { router.push('/login'); return }
     const a = getAdmin()
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsFaculty(a?.role === 'FACULTY')
     setIsAdmin(a?.role === 'SUPER_ADMIN' || a?.role === 'ADMIN')
     apiFetch('/batches').then(r => r.json()).then(j => setBatches(j.data || [])).catch(() => {})
@@ -176,7 +173,9 @@ export default function TimetablePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchTimetable() },    [fetchTimetable])
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchExtraPeriods() }, [fetchExtraPeriods])
 
   // ─── Derived: permanent timetable ────────────────────────────────────────────
@@ -197,25 +196,26 @@ export default function TimetablePage() {
     (!filters.semester      || String(b.semester) === filters.semester)
   ), [batches, filters])
 
-  const dayEntries = useMemo(
-    () => entries
+  const dayEntries = useMemo(() => {
+    const permanent = entries
       .filter(e => e.day?.toLowerCase() === activeDay.toLowerCase())
-      .sort((a, b) => a.start_time.localeCompare(b.start_time)),
-    [entries, activeDay]
-  )
+      .map(entry => ({ entry, isExtra: false as const }))
+    const extras = extraEntries
+      .filter(e => e.day_of_week?.toLowerCase() === activeDay.toLowerCase())
+      .filter(e => !filters.batch_id || e.batch_id === filters.batch_id)
+      .filter(e => !filters.room_id || e.room_id === filters.room_id)
+      .map(entry => ({ entry, isExtra: true as const }))
+
+    return [...permanent, ...extras].sort((a, b) => {
+      const timeDiff = a.entry.start_time.localeCompare(b.entry.start_time)
+      if (timeDiff !== 0) return timeDiff
+      return a.entry.lecture_number - b.entry.lecture_number
+    })
+  }, [entries, extraEntries, activeDay, filters.batch_id, filters.room_id])
+
+
 
   // ─── Derived: extra periods ───────────────────────────────────────────────────
-  const extraDayEntries = useMemo(
-    () => extraEntries
-      .filter(e => e.day_of_week?.toLowerCase() === activeDay.toLowerCase())
-      .sort((a, b) => a.start_time.localeCompare(b.start_time)),
-    [extraEntries, activeDay]
-  )
-
-  const extraAvailableWeeks = useMemo(
-    () => Array.from(new Set(extraEntries.map(e => e.week_start_date))).sort(),
-    [extraEntries]
-  )
 
   // ─── Handlers: permanent timetable ───────────────────────────────────────────
   const handleCreate = async () => {
@@ -371,27 +371,16 @@ export default function TimetablePage() {
 
         {/* Header — unchanged from original */}
         <div className="flex items-center gap-4 mb-8">
-          <a href="/" className="text-[#5DA9FF] text-sm font-bold">← Back</a>
+          <Link href="/" className="text-[#5DA9FF] text-sm font-bold">← Back</Link>
           <h1 className="text-2xl font-bold">Timetable</h1>
         </div>
 
         {/* View toggle — matches the master-data tab pattern exactly */}
-        <div className="flex gap-2 mb-6 border-b border-[#2F4E73]">
-          <button onClick={() => setView('permanent')}
-            className={`px-4 py-2 text-sm font-semibold ${view === 'permanent' ? 'text-[#5DA9FF] border-b-2 border-[#5DA9FF]' : 'text-[#90A6BD]'}`}>
-            Permanent Timetable
-          </button>
-          <button onClick={() => setView('extra')}
-            className={`px-4 py-2 text-sm font-semibold ${view === 'extra' ? 'text-[#F59E0B] border-b-2 border-[#F59E0B]' : 'text-[#90A6BD]'}`}>
-            Extra Periods
-          </button>
-        </div>
 
         {/* ════════════════════════════════════════════════════════════════════ */}
         {/* PERMANENT TIMETABLE VIEW                                            */}
         {/* ════════════════════════════════════════════════════════════════════ */}
-        {view === 'permanent' && (
-          <>
+        <>
             {/* Filters */}
             <div className="flex flex-wrap gap-3 mb-4">
               <select value={filters.academic_year} onChange={(e) => setFilters({ ...filters, academic_year: e.target.value, program_id: '', semester: '', batch_id: '' })} className={inputCls}>
@@ -414,6 +403,13 @@ export default function TimetablePage() {
                 <option value="">All Rooms</option>
                 {rooms.map(r => <option key={r.room_id} value={r.room_id}>{r.room_number}</option>)}
               </select>
+              <div>
+                <label className="text-[#90A6BD] text-xs mb-1 block">Week</label>
+                <input type="date" value={extraFilterWeek}
+                  onChange={e => setExtraFilterWeek(e.target.value)}
+                  className={inputCls}
+                  title="Extra periods for the selected week" />
+              </div>
               {(filters.academic_year || filters.program_id || filters.semester || filters.batch_id || filters.room_id) && (
                 <button onClick={() => setFilters({ academic_year: '', program_id: '', semester: '', batch_id: '', room_id: '' })} className="text-[#F87171] text-sm px-2">Clear</button>
               )}
@@ -429,10 +425,16 @@ export default function TimetablePage() {
                   </button>
                 ))}
               </div>
-              <button onClick={() => { setForm(f => ({ ...f, dayOfWeek: activeDay })); setShowModal(true) }}
-                className="bg-[#5DA9FF] text-white font-bold px-6 py-3 rounded-xl hover:opacity-90">
-                + Add Period
-              </button>
+              <div className="flex gap-3">
+                <button onClick={() => { setForm(f => ({ ...f, dayOfWeek: activeDay })); setShowModal(true) }}
+                  className="bg-[#5DA9FF] text-white font-bold px-6 py-3 rounded-xl hover:opacity-90">
+                  + Add Period
+                </button>
+                <button onClick={() => { setExtraForm(f => ({ ...f, dayOfWeek: activeDay, weekDate: extraFilterWeek })); setExtraError(''); setShowExtraModal(true) }}
+                  className="bg-[#F59E0B] text-[#0D1727] font-bold px-6 py-3 rounded-xl hover:opacity-90">
+                  + Add Extra Period
+                </button>
+              </div>
             </div>
 
             {/* Entry list */}
@@ -448,17 +450,28 @@ export default function TimetablePage() {
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {dayEntries.map((e) => (
-                  <div key={e.timetable_id} className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-5 flex justify-between items-center">
+                {dayEntries.map(({ entry: e, isExtra }) => (
+                  <div key={isExtra ? e.extra_period_id : e.timetable_id}
+                    className={`bg-[#1A2436] rounded-2xl border p-5 flex justify-between items-center ${isExtra ? 'border-[#F59E0B] bg-[#2A1A00]/40' : 'border-[#2F4E73]'}`}>
                     <div>
-                      <p className="text-white font-bold">{e.subject_name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-white font-bold">{e.subject_name}</p>
+                        {isExtra && (
+                          <span className="bg-[#2A1A00] text-[#F59E0B] text-xs font-semibold px-2 py-0.5 rounded-full border border-[#F59E0B]/30">
+                            EXTRA PERIOD
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[#90A6BD] text-sm mt-1">{e.faculty_name} · {e.batch_code} · Room {e.room}</p>
-                      <p className="text-[#4A6080] text-xs mt-1">Lecture {e.lecture_number}</p>
+                      <p className="text-[#4A6080] text-xs mt-1">
+                        Lecture {e.lecture_number}
+                        {isExtra && ` · Week of ${fmtDate((e as ExtraPeriod).week_start_date)}`}
+                      </p>
                     </div>
                     <div className="flex items-center gap-4">
                       <p className="text-[#5DA9FF] text-sm font-mono">{e.start_time} – {e.end_time}</p>
-                      <button onClick={() => openEdit(e)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
-                      <button onClick={() => handleDelete(e.timetable_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button>
+                      <button onClick={() => isExtra ? openEditExtra(e) : openEdit(e)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
+                      <button onClick={() => isExtra ? handleDeleteExtra(e.extra_period_id) : handleDelete(e.timetable_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button>
                     </div>
                   </div>
                 ))}
@@ -562,91 +575,13 @@ export default function TimetablePage() {
                 </div>
               </div>
             )}
-          </>
-        )}
+        </>
 
         {/* ════════════════════════════════════════════════════════════════════ */}
         {/* EXTRA PERIODS VIEW                                                  */}
         {/* ════════════════════════════════════════════════════════════════════ */}
-        {view === 'extra' && (
+        <>
           <>
-            {/* Extra-period filters */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              <input type="date" value={extraFilterWeek}
-                onChange={e => setExtraFilterWeek(e.target.value)}
-                placeholder="Any date in the week"
-                className={inputCls}
-                title="Filter by week — pick any date in the target week" />
-              <select value={extraFilterBatch} onChange={e => setExtraFilterBatch(e.target.value)} className={inputCls}>
-                <option value="">All Batches</option>
-                {batches.map(b => <option key={b.batch_id} value={b.batch_id}>{b.batch_code}</option>)}
-              </select>
-              {(extraFilterWeek || extraFilterBatch) && (
-                <button onClick={() => { setExtraFilterWeek(''); setExtraFilterBatch('') }}
-                  className="text-[#F87171] text-sm px-2">Clear</button>
-              )}
-            </div>
-
-            {/* Week pills — show which weeks are currently visible */}
-            {extraAvailableWeeks.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {extraAvailableWeeks.map(w => (
-                  <span key={w} className="bg-[#2A1A00] text-[#F59E0B] text-xs px-3 py-1 rounded-full border border-[#F59E0B]/20">
-                    Week of {fmtDate(w)}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Day tabs + Add button */}
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex gap-2">
-                {DAYS.map((day) => (
-                  <button key={day} onClick={() => setActiveDay(day)}
-                    className={`px-4 py-2 rounded-xl text-sm font-bold ${activeDay === day ? 'bg-[#F59E0B] text-[#0D1727]' : 'bg-[#1A2436] text-[#90A6BD] border border-[#2F4E73]'}`}>
-                    {day.slice(0, 3)}
-                  </button>
-                ))}
-              </div>
-              <button onClick={() => { setExtraForm(f => ({ ...f, dayOfWeek: activeDay })); setExtraError(''); setShowExtraModal(true) }}
-                className="bg-[#F59E0B] text-[#0D1727] font-bold px-6 py-3 rounded-xl hover:opacity-90">
-                + Add Extra Period
-              </button>
-            </div>
-
-            {/* Entry list */}
-            {extraLoading ? (
-              <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center text-[#90A6BD]">Loading...</div>
-            ) : extraDayEntries.length === 0 ? (
-              <div className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-12 text-center">
-                <p className="text-[#90A6BD] font-bold">No extra periods for {activeDay}</p>
-                <button onClick={() => { setExtraForm(f => ({ ...f, dayOfWeek: activeDay })); setExtraError(''); setShowExtraModal(true) }}
-                  className="mt-4 bg-[#F59E0B] text-[#0D1727] font-bold px-6 py-2 rounded-xl hover:opacity-90 text-sm">
-                  + Add Extra Period
-                </button>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {extraDayEntries.map((e) => (
-                  <div key={e.extra_period_id} className="bg-[#1A2436] rounded-2xl border border-[#2F4E73] p-5 flex justify-between items-center">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <p className="text-white font-bold">{e.subject_name}</p>
-                        <span className="bg-[#2A1A00] text-[#F59E0B] text-xs px-2 py-0.5 rounded-full">Extra</span>
-                      </div>
-                      <p className="text-[#90A6BD] text-sm mt-1">{e.faculty_name} · {e.batch_code} · Room {e.room}</p>
-                      <p className="text-[#4A6080] text-xs mt-1">Lecture {e.lecture_number} · Week of {fmtDate(e.week_start_date)}</p>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <p className="text-[#F59E0B] text-sm font-mono">{e.start_time.slice(0,5)} – {e.end_time.slice(0,5)}</p>
-                      <button onClick={() => openEditExtra(e)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
-                      <button onClick={() => handleDeleteExtra(e.extra_period_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Remove</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
             {/* Add Extra Period Modal */}
             {showExtraModal && (
               <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
@@ -771,7 +706,7 @@ export default function TimetablePage() {
               </div>
             )}
           </>
-        )}
+        </>
 
       </div>
     </main>
