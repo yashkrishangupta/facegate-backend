@@ -261,3 +261,19 @@ export const createAdmin = async (data: any) => {
 
     return result.rows[0];
 };
+
+export const updateAdminDetails = async (adminId: string, data: any) => {
+    const { first_name, last_name, email, phone, role } = data;
+    const result = await pool.query(
+        `UPDATE admin_user SET
+            first_name = COALESCE($2, first_name),
+            last_name = COALESCE($3, last_name),
+            email = COALESCE($4, email),
+            phone = COALESCE($5, phone),
+            role = COALESCE($6, role),
+            updated_at = CURRENT_TIMESTAMP
+         WHERE admin_id = $1 RETURNING *`,
+        [adminId, first_name || null, last_name || null, email || null, phone || null, role || null]
+    );
+    return result.rows[0];
+};

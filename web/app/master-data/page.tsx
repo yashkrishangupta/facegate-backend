@@ -766,6 +766,10 @@ function AdminsTab() {
   const [newPassword, setNewPassword] = useState('')
   const [resetError, setResetError] = useState('')
   const [resetting, setResetting] = useState(false)
+  const [editAdmin, setEditAdmin] = useState<any | null>(null)
+  const [editAdminForm, setEditAdminForm] = useState({ first_name: '', last_name: '', email: '', phone: '', role: 'ADMIN' })
+  const [editAdminError, setEditAdminError] = useState('')
+  const [editAdminSubmitting, setEditAdminSubmitting] = useState(false)
 
   const handleResetPassword = async () => {
     if (!resetTarget?.admin_id) return
@@ -800,6 +804,23 @@ function AdminsTab() {
     setForm({ employee_id: '', first_name: '', last_name: '', email: '', phone: '', role: 'ADMIN', password: '' })
   }
 
+  const openEditAdmin = (a: any) => {
+    setEditAdmin(a)
+    setEditAdminForm({ first_name: a.first_name, last_name: a.last_name, email: a.email || '', phone: a.phone || '', role: a.role })
+    setEditAdminError('')
+  }
+
+  const handleEditAdmin = async () => {
+    if (!editAdmin) return
+    setEditAdminError(''); setEditAdminSubmitting(true)
+    try {
+      const res = await apiFetch(`/admin/${editAdmin.admin_id}`, { method: 'PUT', body: JSON.stringify(editAdminForm) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setEditAdminError(json.message || 'Failed'); return }
+      setEditAdmin(null); fetchItems()
+    } catch { setEditAdminError('Network error') } finally { setEditAdminSubmitting(false) }
+  }
+
   const handleDeactivate = async (id: string) => {
     if (!confirm('Deactivate this account?')) return
     setListError('')
@@ -831,6 +852,7 @@ function AdminsTab() {
               </div>
               {isSuperAdmin && (
                 <div className="flex gap-4 mt-4">
+                  <button onClick={() => openEditAdmin(a)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
                   <button onClick={() => { setResetTarget(a); setNewPassword(''); setResetError('') }} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Reset Password</button>
                   <button onClick={() => handleDeactivate(a.admin_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
                 </div>
@@ -872,6 +894,26 @@ function AdminsTab() {
         </Modal>
       )}
 
+      {editAdmin && (
+        <Modal title="Edit Admin" onClose={() => setEditAdmin(null)}>
+          {editAdminError && <p className="text-[#F87171] text-sm mb-3">{editAdminError}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="First Name" value={editAdminForm.first_name} onChange={(e) => setEditAdminForm(p => ({ ...p, first_name: e.target.value }))} className={inputCls} />
+            <input placeholder="Last Name" value={editAdminForm.last_name} onChange={(e) => setEditAdminForm(p => ({ ...p, last_name: e.target.value }))} className={inputCls} />
+            <input placeholder="Email" value={editAdminForm.email} onChange={(e) => setEditAdminForm(p => ({ ...p, email: e.target.value }))} className={`col-span-2 ${inputCls}`} />
+            <input placeholder="Phone" value={editAdminForm.phone} onChange={(e) => setEditAdminForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} />
+            <select value={editAdminForm.role} onChange={(e) => setEditAdminForm(p => ({ ...p, role: e.target.value }))} className={inputCls}>
+              <option value="ADMIN">ADMIN</option>
+              <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+              <option value="VIEWER">VIEWER</option>
+            </select>
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setEditAdmin(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleEditAdmin} disabled={editAdminSubmitting} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{editAdminSubmitting ? 'Saving...' : 'Save Changes'}</button>
+          </div>
+        </Modal>
+      )}
       {resetTarget && (
         <Modal title={`Reset Password — ${resetTarget.first_name} ${resetTarget.last_name}`} onClose={() => setResetTarget(null)}>
           {resetError && <p className="text-[#F87171] text-sm mb-3">{resetError}</p>}

@@ -60,3 +60,7 @@ export const createAdmin = async (data: any) => {
     if (String(data.password).length < 8) throw new Error("Password must be at least 8 characters");
     return await AdminRepository.createAdmin(data);
 };
+
+export const updateAdminDetails = async (adminId: string, data: any) => {
+    return await AdminRepository.updateAdminDetails(adminId, data);
+};
