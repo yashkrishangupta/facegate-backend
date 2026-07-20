@@ -41,9 +41,18 @@ export default function WelcomeBanner({ name }: Props) {
             monitor your institution from one modern dashboard.
           </p>
 
+          <p className="mt-3 text-sm text-blue-200">
+            {new Date().toLocaleDateString("en-IN", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+              year: "numeric",
+            })}
+          </p>
+
           <button className="mt-6 flex items-center gap-2 rounded-xl bg-white px-6 py-3 font-semibold text-slate-900 hover:bg-slate-100 transition">
 
-            View Reports
+            Go to Reports
 
             <ArrowRight size={18} />
 
@@ -56,9 +65,9 @@ export default function WelcomeBanner({ name }: Props) {
 
           <div className="w-44 h-44 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center">
 
-            <div className="text-7xl">
-              📊
-            </div>
+           <div className="text-8xl animate-pulse">
+             🚀
+           </div>
 
           </div>
 

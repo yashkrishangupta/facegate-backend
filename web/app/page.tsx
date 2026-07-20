@@ -9,6 +9,14 @@ import Topbar from "../components/Topbar";
 import RecentActivity from "../components/RecentActivity";
 import DashboardOverview from "../components/DashboardOverview";
 import WelcomeBanner from "../components/WelcomeBanner";
+import ProgressCards from "../components/ProgressCards";
+import UpcomingClasses from "../components/UpcomingClasses";
+import SystemStatus from "../components/SystemStatus";
+import TopRooms from "../components/TopRooms";
+import LatestStudents from "../components/LatestStudents";
+import Announcements from "../components/Announcements";
+import MiniCalendar from "../components/MiniCalendar";
+import AttendanceTrend from "../components/AttendanceTrend";
 
 import {
   Users,
@@ -91,7 +99,7 @@ const icons = {
 };
 
 return (
-  <main className="min-h-screen flex bg-[#0D1727] text-white">
+  <main className="min-h-screen flex bg-gradient-to-br from-[#0B1322] via-[#122038] to-[#1A2740] text-white">
 
     <Sidebar />
 
@@ -154,11 +162,33 @@ return (
     ))}
 </div>
 
-<RecentActivity />
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-10">
 
-<DashboardOverview />
+  <RecentActivity />
+  <DashboardOverview />
 
-</div>
+  <ProgressCards />
+  <UpcomingClasses />
+
+  <SystemStatus />
+  <TopRooms />
+
+  <LatestStudents />
+  <Announcements />
+
+  <MiniCalendar />
+  <AttendanceTrend />
+
+  </div>
+
+
+
+<footer className="mt-10 text-center text-slate-500 text-sm">
+  FaceGate Admin Dashboard • Version 1.0
+</footer>
+
+
+</div> {/* flex-1 p-8 */}
 
 </main>
 );
