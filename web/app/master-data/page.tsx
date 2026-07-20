@@ -718,6 +718,21 @@ function AdminsTab() {
   const [createdUsername, setCreatedUsername] = useState('')
   const [form, setForm] = useState({ employee_id: '', first_name: '', last_name: '', email: '', phone: '', role: 'ADMIN', password: '' })
   const isSuperAdmin = getAdmin()?.role === 'SUPER_ADMIN'
+  const [resetTarget, setResetTarget] = useState<any | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetting, setResetting] = useState(false)
+
+  const handleResetPassword = async () => {
+    if (!resetTarget?.admin_id) return
+    setResetError(''); setResetting(true)
+    try {
+      const res = await apiFetch(`/admin/${resetTarget.admin_id}/security`, { method: 'PUT', body: JSON.stringify({ newPassword }) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setResetError(json.message || 'Failed'); return }
+      setResetTarget(null); setNewPassword('')
+    } catch { setResetError('Network error') } finally { setResetting(false) }
+  }
 
   const fetchItems = async () => {
     setLoading(true)
@@ -770,7 +785,12 @@ function AdminsTab() {
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${a.account_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A1A] text-[#F87171]'}`}>{a.account_status}</span>
               </div>
-              {isSuperAdmin && <button onClick={() => handleDeactivate(a.admin_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>}
+              {isSuperAdmin && (
+                <div className="flex gap-4 mt-4">
+                  <button onClick={() => { setResetTarget(a); setNewPassword(''); setResetError('') }} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Reset Password</button>
+                  <button onClick={() => handleDeactivate(a.admin_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -805,6 +825,17 @@ function AdminsTab() {
               </div>
             </>
           )}
+        </Modal>
+      )}
+
+      {resetTarget && (
+        <Modal title={`Reset Password — ${resetTarget.first_name} ${resetTarget.last_name}`} onClose={() => setResetTarget(null)}>
+          {resetError && <p className="text-[#F87171] text-sm mb-3">{resetError}</p>}
+          <input placeholder="New Password (min 8 chars)" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={`w-full ${inputCls}`} />
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setResetTarget(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleResetPassword} disabled={resetting || newPassword.length < 8} className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{resetting ? 'Resetting...' : 'Reset Password'}</button>
+          </div>
         </Modal>
       )}
     </div>
