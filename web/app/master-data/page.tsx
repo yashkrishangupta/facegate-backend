@@ -584,6 +584,10 @@ function FacultyTab() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [createdUsername, setCreatedUsername] = useState('')
+  const [editFaculty, setEditFaculty] = useState<any | null>(null)
+  const [editFacultyForm, setEditFacultyForm] = useState({ first_name: '', last_name: '', email: '', phone: '', designation: DESIGNATIONS[0], department_id: '' })
+  const [editFacultyError, setEditFacultyError] = useState('')
+  const [editFacultySubmitting, setEditFacultySubmitting] = useState(false)
   const [resetTarget, setResetTarget] = useState<any | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [resetError, setResetError] = useState('')
@@ -610,6 +614,23 @@ function FacultyTab() {
   const closeModal = () => {
     setShowModal(false); setError(''); setCreatedUsername('')
     setForm({ department_id: '', employee_id: '', first_name: '', last_name: '', email: '', phone: '', designation: DESIGNATIONS[0], password: '' })
+  }
+
+  const openEditFaculty = (f: any) => {
+    setEditFaculty(f)
+    setEditFacultyForm({ first_name: f.first_name, last_name: f.last_name, email: f.email || '', phone: f.phone || '', designation: f.designation, department_id: f.department_id || '' })
+    setEditFacultyError('')
+  }
+
+  const handleEditFaculty = async () => {
+    if (!editFaculty) return
+    setEditFacultyError(''); setEditFacultySubmitting(true)
+    try {
+      const res = await apiFetch(`/faculty/${editFaculty.faculty_id}`, { method: 'PUT', body: JSON.stringify(editFacultyForm) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setEditFacultyError(json.message || 'Failed to update'); return }
+      setEditFaculty(null); fetchFaculty()
+    } catch { setEditFacultyError('Network error') } finally { setEditFacultySubmitting(false) }
   }
 
   const handleDeactivate = async (id: string) => {
@@ -652,6 +673,7 @@ function FacultyTab() {
               </div>
               {canManage && (
                 <div className="flex gap-4 mt-4">
+                  <button onClick={() => openEditFaculty(f)} className="text-[#F59E0B] text-sm hover:text-white transition-colors">Edit</button>
                   <button onClick={() => handleDeactivate(f.faculty_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
                   {isSuperAdmin && f.admin_id && <button onClick={() => { setResetTarget(f); setNewPassword(''); setResetError('') }} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Reset Password</button>}
                 </div>
@@ -694,6 +716,28 @@ function FacultyTab() {
           )}
         </Modal>
       )}
+      {editFaculty && (
+        <Modal title="Edit Faculty" onClose={() => setEditFaculty(null)}>
+          {editFacultyError && <p className="text-[#F87171] text-sm mb-3">{editFacultyError}</p>}
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="First Name" value={editFacultyForm.first_name} onChange={(e) => setEditFacultyForm(p => ({ ...p, first_name: e.target.value }))} className={inputCls} />
+            <input placeholder="Last Name" value={editFacultyForm.last_name} onChange={(e) => setEditFacultyForm(p => ({ ...p, last_name: e.target.value }))} className={inputCls} />
+            <input placeholder="Email" value={editFacultyForm.email} onChange={(e) => setEditFacultyForm(p => ({ ...p, email: e.target.value }))} className={`col-span-2 ${inputCls}`} />
+            <input placeholder="Phone" value={editFacultyForm.phone} onChange={(e) => setEditFacultyForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} />
+            <select value={editFacultyForm.designation} onChange={(e) => setEditFacultyForm(p => ({ ...p, designation: e.target.value }))} className={inputCls}>
+              {DESIGNATIONS.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <select value={editFacultyForm.department_id} onChange={(e) => setEditFacultyForm(p => ({ ...p, department_id: e.target.value }))} className={`col-span-2 ${inputCls}`}>
+              <option value="">Department…</option>
+              {departments.map((d: any) => <option key={d.department_id} value={d.department_id}>{d.department_name}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setEditFaculty(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleEditFaculty} disabled={editFacultySubmitting} className="flex-1 bg-[#F59E0B] text-black font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{editFacultySubmitting ? 'Saving...' : 'Save Changes'}</button>
+          </div>
+        </Modal>
+      )}
       {resetTarget && (
         <Modal title={`Reset Password — ${resetTarget.first_name} ${resetTarget.last_name}`} onClose={() => setResetTarget(null)}>
           <p className="text-[#90A6BD] text-sm mb-4">No current password needed — this is a direct reset, only SUPER_ADMIN can do this.</p>
@@ -718,6 +762,21 @@ function AdminsTab() {
   const [createdUsername, setCreatedUsername] = useState('')
   const [form, setForm] = useState({ employee_id: '', first_name: '', last_name: '', email: '', phone: '', role: 'ADMIN', password: '' })
   const isSuperAdmin = getAdmin()?.role === 'SUPER_ADMIN'
+  const [resetTarget, setResetTarget] = useState<any | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [resetError, setResetError] = useState('')
+  const [resetting, setResetting] = useState(false)
+
+  const handleResetPassword = async () => {
+    if (!resetTarget?.admin_id) return
+    setResetError(''); setResetting(true)
+    try {
+      const res = await apiFetch(`/admin/${resetTarget.admin_id}/security`, { method: 'PUT', body: JSON.stringify({ newPassword }) })
+      const json = await res.json()
+      if (!res.ok || !json.success) { setResetError(json.message || 'Failed'); return }
+      setResetTarget(null); setNewPassword('')
+    } catch { setResetError('Network error') } finally { setResetting(false) }
+  }
 
   const fetchItems = async () => {
     setLoading(true)
@@ -770,7 +829,12 @@ function AdminsTab() {
                 </div>
                 <span className={`text-xs px-2 py-1 rounded-full ${a.account_status === 'ACTIVE' ? 'bg-[#14532D] text-[#4ADE80]' : 'bg-[#2A1A1A] text-[#F87171]'}`}>{a.account_status}</span>
               </div>
-              {isSuperAdmin && <button onClick={() => handleDeactivate(a.admin_id)} className="mt-4 text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>}
+              {isSuperAdmin && (
+                <div className="flex gap-4 mt-4">
+                  <button onClick={() => { setResetTarget(a); setNewPassword(''); setResetError('') }} className="text-[#5DA9FF] text-sm hover:text-white transition-colors">Reset Password</button>
+                  <button onClick={() => handleDeactivate(a.admin_id)} className="text-[#F87171] text-sm hover:text-white transition-colors">Deactivate</button>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -805,6 +869,17 @@ function AdminsTab() {
               </div>
             </>
           )}
+        </Modal>
+      )}
+
+      {resetTarget && (
+        <Modal title={`Reset Password — ${resetTarget.first_name} ${resetTarget.last_name}`} onClose={() => setResetTarget(null)}>
+          {resetError && <p className="text-[#F87171] text-sm mb-3">{resetError}</p>}
+          <input placeholder="New Password (min 8 chars)" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className={`w-full ${inputCls}`} />
+          <div className="flex gap-3 mt-5">
+            <button onClick={() => setResetTarget(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
+            <button onClick={handleResetPassword} disabled={resetting || newPassword.length < 8} className="flex-1 bg-[#5DA9FF] text-[#0D1727] font-semibold rounded-lg py-2 text-sm disabled:opacity-50">{resetting ? 'Resetting...' : 'Reset Password'}</button>
+          </div>
         </Modal>
       )}
     </div>
