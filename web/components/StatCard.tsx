@@ -17,7 +17,7 @@ export default function StatCard({
   icon,
 }: Props) {
   return (
-    <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
+    <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-5 shadow-lg hover:shadow-2xl hover:-translate-y-1 transition-all duration-300">
 
       <div className="flex justify-between items-center">
 

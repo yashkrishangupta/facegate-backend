@@ -29,11 +29,19 @@ const menu = [
   { name: "Change Log", href: "/change-log", icon: BookOpen },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  open: boolean;
+}
+
+export default function Sidebar({ open }: SidebarProps) {
   const pathname = usePathname();
 
   return (
-    <aside className="w-72 min-h-screen bg-[#101827] border-r border-slate-700 flex flex-col">
+    <aside
+      className={`fixed top-0 left-0 z-40 h-screen w-64 bg-[#121C2E] border-r border-[#2F4E73] p-6 transform transition-transform duration-300 ${
+        open ? "translate-x-0" : "-translate-x-full"
+      }`}
+    >
 
       <div className="px-8 py-8">
         <h1 className="text-3xl font-bold text-blue-400">
