@@ -8,27 +8,21 @@ import Topbar from "../components/Topbar";
 import RecentActivity from "../components/RecentActivity";
 import DashboardOverview from "../components/DashboardOverview";
 import WelcomeBanner from "../components/WelcomeBanner";
-import ProgressCards from "../components/ProgressCards";
 import SystemStatus from "../components/SystemStatus";
 import LatestStudents from "../components/LatestStudents";
 import AttendanceTrend from "../components/AttendanceTrend";
-const [sidebarOpen, setSidebarOpen] = useState(false);
+
 
 import {
   Users,
   Smartphone,
   AlertTriangle,
   GraduationCap,
-  CalendarDays,
-  Bell,
-  Building2,
-  ClipboardList,
-  BookOpen,
-  Clock,
 } from "lucide-react";
 
 export default function Home() {
   const router = useRouter()
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [admin, setAdmin] = useState<ReturnType<typeof getAdmin>>(null)
   const [checkingAuth, setCheckingAuth] = useState(true)
   const [stats, setStats] = useState({
