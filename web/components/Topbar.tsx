@@ -5,46 +5,62 @@ import {
   Search,
   UserCircle2,
   LogOut,
+   Menu,
 } from "lucide-react";
+
 
 interface Props {
   name: string;
   role: string;
   onLogout: () => void;
+  onMenuClick: () => void;
 }
 
 export default function Topbar({
   name,
   role,
   onLogout,
+  onMenuClick,
 }: Props) {
   return (
     <header className="flex items-center justify-between mb-8">
 
       {/* Left */}
-      <div>
-        <h2 className="text-3xl font-bold text-white">
-          Dashboard
-        </h2>
+     <div className="flex items-center gap-4">
 
-        <p className="text-slate-400 mt-1">
-          Welcome back, {name}
-        </p>
-          <p className="text-xs text-slate-500 mt-1">
-            {new Date().toLocaleDateString("en-IN", {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })}
-          </p>
-      </div>
+       <button
+         onClick={onMenuClick}
+         className="bg-[#1A2436] p-2 rounded-lg hover:bg-[#24324B] transition"
+       >
+         <Menu size={22} />
+       </button>
+
+       <div>
+         <h2 className="text-2xl font-bold text-white">
+           Dashboard
+         </h2>
+
+         <p className="text-sm text-slate-400">
+           Welcome back, {name}
+         </p>
+
+         <p className="text-xs text-slate-500 mt-1">
+           {new Date().toLocaleDateString("en-IN", {
+             weekday: "long",
+             day: "numeric",
+             month: "long",
+             year: "numeric",
+           })}
+         </p>
+       </div>
+
+     </div>
 
       {/* Right */}
       <div className="flex items-center gap-4">
 
         {/* Search */}
-        <div className="flex items-center gap-2 bg-[#1A2436] border border-[#2F4E73] rounded-xl px-4 py-2">
+        <div className="flex items-center gap-2 bg-[#1A2436] border border-[#2F4E73] rounded-lg px-3 py-2">
 
           <Search
             size={18}
@@ -54,13 +70,13 @@ export default function Topbar({
           <input
             type="text"
             placeholder="Search..."
-            className="bg-transparent outline-none text-sm text-white placeholder:text-slate-500 w-52"
+            className="bg-transparent outline-none text-sm text-white placeholder:text-slate-500 w-40"
           />
 
         </div>
 
         {/* Notification */}
-        <button className="relative bg-[#1A2436] p-3 rounded-xl hover:bg-[#24324B] hover:scale-105 transition-all">
+        <button className="relative bg-[#1A2436] p-2 rounded-lg hover:bg-[#24324B] hover:scale-105 transition-all">
 
           <Bell size={20} />
 
@@ -69,10 +85,10 @@ export default function Topbar({
         </button>
 
         {/* Profile */}
-        <div className="flex items-center gap-3 bg-[#1A2436] border border-[#2F4E73] rounded-xl px-4 py-2">
+        <div className="flex items-center gap-3 bg-[#1A2436] border border-[#2F4E73] rounded-lg px-3 py-2">
 
           <UserCircle2
-            size={38}
+            size={32}
             className="text-blue-400"
           />
 
@@ -93,7 +109,7 @@ export default function Topbar({
         {/* Logout */}
         <button
           onClick={onLogout}
-          className="flex items-center gap-2 bg-red-500 hover:bg-red-600 hover:scale-105 transition-all px-4 py-2 rounded-xl"
+          className="flex items-center gap-2 bg-red-500 hover:bg-red-600 transition px-3 py-2 rounded-lg text-sm"
         >
 
           <LogOut size={18} />
