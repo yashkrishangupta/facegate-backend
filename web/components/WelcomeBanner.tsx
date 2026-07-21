@@ -49,10 +49,6 @@ export default function WelcomeBanner({ name }: Props) {
             })}
           </p>
 
-
-
-        </div>
-
         </div>
 
       </div>

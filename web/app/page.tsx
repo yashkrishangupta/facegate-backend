@@ -11,7 +11,6 @@ import WelcomeBanner from "../components/WelcomeBanner";
 import SystemStatus from "../components/SystemStatus";
 import LatestStudents from "../components/LatestStudents";
 import AttendanceTrend from "../components/AttendanceTrend";
-const [sidebarOpen, setSidebarOpen] = useState(false);
 
 
 import {
