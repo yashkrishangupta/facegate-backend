@@ -620,13 +620,33 @@ export default function ReportsPage() {
       { color: 'bg-red-400', label: '< 60% — Low' },
    ];
 
-   // ── Tabs config ───────────────────────────────────────────────────────────
-   const tabs: { id: Tab; label: string; icon: string }[] = [
+   // ── Report type options ────────────────────────────────────────────────────
+   const reportTypeOptions: { id: Tab; label: string; icon: string }[] = [
       { id: 'student', label: 'By Student', icon: '👤' },
-      { id: 'batch', label: 'By Batch', icon: '🏷️' },
+      { id: 'batch', label: 'By Batch / Class', icon: '🏷️' },
       { id: 'subject', label: 'By Subject', icon: '📚' },
       { id: 'room', label: 'By Room', icon: '🚪' },
    ];
+
+   const resetFilters = () => {
+      setStudentIdInput('');
+      setBatchIdInput('');
+      setSubjectIdInput('');
+      setRoomIdInput('');
+      setDateFrom('');
+      setDateTo('');
+      setSemester('');
+      setData(null);
+      setError(null);
+   };
+
+   // Entity-specific field config
+   const entityField = {
+      student: { id: 'input-student-id', label: 'Student ID / Roll No. / Name', placeholder: 'e.g. 2024CS01, John Doe…', value: studentIdInput, set: setStudentIdInput },
+      batch:   { id: 'input-batch-id',   label: 'Batch Code or ID',            placeholder: 'e.g. CS-2024, b2a7…',       value: batchIdInput,   set: setBatchIdInput },
+      subject: { id: 'input-subject-id', label: 'Subject Code / Name / ID',    placeholder: 'e.g. CS101, Data Structures…', value: subjectIdInput, set: setSubjectIdInput },
+      room:    { id: 'input-room-id',    label: 'Room Number or ID',            placeholder: 'e.g. Room-101, a3f9…',      value: roomIdInput,    set: setRoomIdInput },
+   }[activeTab];
 
    return (
       <main className='min-h-screen bg-[#0A1120] text-white'>
@@ -664,124 +684,68 @@ export default function ReportsPage() {
          </div>
 
          <div className='max-w-7xl mx-auto px-6 py-8 space-y-6'>
-            {/* ── Tabs ─────────────────────────────────────────────────────────── */}
-            <div className='flex gap-2'>
-               {tabs.map((t) => (
-                  <button
-                     key={t.id}
-                     id={`tab-${t.id}`}
-                     onClick={() => {
-                        setActiveTab(t.id);
-                        setData(null);
-                        setError(null);
-                     }}
-                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold transition-all border ${
-                        activeTab === t.id
-                           ? 'bg-[#5DA9FF]/10 border-[#5DA9FF] text-[#5DA9FF]'
-                           : 'bg-[#0D1727] border-[#1E2D42] text-[#5A7A9A] hover:border-[#2F4E73] hover:text-white'
-                     }`}
-                  >
-                     <span>{t.icon}</span>
-                     <span className='hidden sm:inline'>{t.label}</span>
-                  </button>
-               ))}
-            </div>
 
-            {/* ── Filter panel ─────────────────────────────────────────────────── */}
-            <div className='bg-[#0D1727] border border-[#1E2D42] rounded-2xl p-5 space-y-4'>
-               <p className='text-xs font-bold tracking-widest uppercase text-[#5A7A9A]'>
-                  Filters
-               </p>
-
-               {/* Entity ID input */}
-               <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-                  {activeTab === 'student' && (
-                     <div className='flex flex-col gap-1.5'>
-                        <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Student ID, Roll No. or Name
-                        </label>
-                        <input
-                           id='input-student-id'
-                           type='text'
-                           value={studentIdInput}
-                           onChange={(e) => setStudentIdInput(e.target.value)}
-                           placeholder='e.g. 2024CS01, John Doe...'
-                           className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
-                        />
-                     </div>
-                  )}
-                  {activeTab === 'batch' && (
-                     <div className='flex flex-col gap-1.5'>
-                        <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Batch Code or ID
-                        </label>
-                        <input
-                           id='input-batch-id'
-                           type='text'
-                           value={batchIdInput}
-                           onChange={(e) => setBatchIdInput(e.target.value)}
-                           placeholder='e.g. CS-2024, b2a7...'
-                           className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
-                        />
-                     </div>
-                  )}
-                  {activeTab === 'subject' && (
-                     <div className='flex flex-col gap-1.5'>
-                        <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Subject Code, Name, or ID
-                        </label>
-                        <input
-                           id='input-subject-id'
-                           type='text'
-                           value={subjectIdInput}
-                           onChange={(e) => setSubjectIdInput(e.target.value)}
-                           placeholder='e.g. CS101, Data Structures...'
-                           className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
-                        />
-                     </div>
-                  )}
-                  {activeTab === 'room' && (
-                     <div className='flex flex-col gap-1.5'>
-                        <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Room Number or ID
-                        </label>
-                        <input
-                           id='input-room-id'
-                           type='text'
-                           value={roomIdInput}
-                           onChange={(e) => setRoomIdInput(e.target.value)}
-                           placeholder='e.g. Room-101, a3f9...'
-                           className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
-                        />
-                     </div>
-                  )}
-                  {activeTab === 'student' && (
-                     <div className='flex flex-col gap-1.5'>
-                        <label className='text-xs text-[#5A7A9A] font-medium'>
-                           Semester
-                        </label>
-                        <select
-                           id='select-semester'
-                           value={semester}
-                           onChange={(e) => setSemester(e.target.value)}
-                           className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#5DA9FF] transition-colors appearance-none'
-                        >
-                           <option value=''>All Semesters</option>
-                           {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                              <option key={s} value={s}>
-                                 Semester {s}
-                              </option>
-                           ))}
-                        </select>
-                     </div>
-                  )}
+            {/* ── Combined Filter Panel ──────────────────────────────────────────── */}
+            <div className='bg-[#0D1727] border border-[#1E2D42] rounded-2xl overflow-hidden'>
+               {/* Header */}
+               <div className='flex items-center justify-between px-5 py-3.5 border-b border-[#1E2D42]'>
+                  <div className='flex items-center gap-2'>
+                     <svg className='w-4 h-4 text-[#5DA9FF]' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+                        <polygon points='22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3' />
+                     </svg>
+                     <span className='text-xs font-bold tracking-widest uppercase text-[#5A7A9A]'>Filters</span>
+                  </div>
                </div>
 
-               {/* Date range */}
-               <div className='flex flex-wrap items-end gap-4'>
+               {/* Filter rows */}
+               <div className='p-5 space-y-4'>
+                  {/* Row 1: Report Type | Entity Input | Date Range */}
+                  <div className='grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end'>
+
+                     {/* Report Type */}
                      <div className='flex flex-col gap-1.5'>
-                        <label className='text-xs text-[#5A7A9A] font-medium'>
-                           From
+                        <label className='text-xs text-[#5A7A9A] font-semibold uppercase tracking-wider'>
+                           Report Type
+                        </label>
+                        <div className='relative'>
+                           <select
+                              id='select-report-type'
+                              value={activeTab}
+                              onChange={(e) => {
+                                 setActiveTab(e.target.value as Tab);
+                                 setData(null);
+                                 setError(null);
+                              }}
+                              className='w-full appearance-none bg-[#141E2E] border border-[#1E2D42] rounded-xl pl-4 pr-10 py-2.5 text-sm text-white focus:outline-none focus:border-[#5DA9FF] transition-colors cursor-pointer'
+                           >
+                              {reportTypeOptions.map((o) => (
+                                 <option key={o.id} value={o.id}>{o.icon}  {o.label}</option>
+                              ))}
+                           </select>
+                           <span className='pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#5A7A9A] text-xs'>▾</span>
+                        </div>
+                     </div>
+
+                     {/* Dynamic entity input */}
+                     <div className='flex flex-col gap-1.5'>
+                        <label htmlFor={entityField.id} className='text-xs text-[#5A7A9A] font-semibold uppercase tracking-wider'>
+                           {entityField.label}
+                        </label>
+                        <input
+                           id={entityField.id}
+                           type='text'
+                           value={entityField.value}
+                           onChange={(e) => entityField.set(e.target.value)}
+                           onKeyDown={(e) => e.key === 'Enter' && runReport()}
+                           placeholder={entityField.placeholder}
+                           className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white placeholder-[#3A5A7A] focus:outline-none focus:border-[#5DA9FF] transition-colors'
+                        />
+                     </div>
+
+                     {/* Date From */}
+                     <div className='flex flex-col gap-1.5'>
+                        <label htmlFor='input-date-from' className='text-xs text-[#5A7A9A] font-semibold uppercase tracking-wider'>
+                           Date From
                         </label>
                         <input
                            id='input-date-from'
@@ -791,9 +755,11 @@ export default function ReportsPage() {
                            className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#5DA9FF] transition-colors'
                         />
                      </div>
+
+                     {/* Date To */}
                      <div className='flex flex-col gap-1.5'>
-                        <label className='text-xs text-[#5A7A9A] font-medium'>
-                           To
+                        <label htmlFor='input-date-to' className='text-xs text-[#5A7A9A] font-semibold uppercase tracking-wider'>
+                           Date To
                         </label>
                         <input
                            id='input-date-to'
@@ -803,52 +769,92 @@ export default function ReportsPage() {
                            className='bg-[#141E2E] border border-[#1E2D42] rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#5DA9FF] transition-colors'
                         />
                      </div>
+                  </div>
 
-                     {/* Quick presets */}
-                     <div className='flex gap-2'>
-                        {(['week', 'month', 'semester'] as const).map((p) => (
-                           <button
-                              key={p}
-                              id={`btn-quick-${p}`}
-                              onClick={() => applyQuick(p)}
-                              className='text-xs font-bold px-3 py-2 rounded-lg bg-[#141E2E] border border-[#1E2D42] text-[#5A7A9A] hover:border-[#5DA9FF] hover:text-white transition-all capitalize'
-                           >
-                              {p === 'semester'
-                                 ? 'This Semester'
-                                 : `This ${p.charAt(0).toUpperCase() + p.slice(1)}`}
-                           </button>
-                        ))}
-                        {(dateFrom || dateTo) && (
-                           <button
-                              id='btn-clear-dates'
-                              onClick={() => {
-                                 setDateFrom('');
-                                 setDateTo('');
-                              }}
-                              className='text-xs font-bold px-3 py-2 rounded-lg bg-[#141E2E] border border-[#2F1A1A] text-red-400 hover:border-red-500 transition-all'
-                           >
-                              Clear
-                           </button>
-                        )}
-                     </div>
-               </div>
+                  {/* Row 2: Semester (student only) | Quick presets | spacer | Actions */}
+                  <div className='flex flex-wrap items-center gap-3'>
 
-               {/* Run button */}
-               <button
-                     id='btn-run-report'
-                     onClick={runReport}
-                     disabled={loading}
-                     className='w-full sm:w-auto flex items-center justify-center gap-2 bg-[#5DA9FF] hover:bg-[#4A96F0] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-8 py-2.5 rounded-xl transition-all text-sm'
-                  >
-                     {loading ? (
-                        <>
-                           <span className='w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block' />
-                           Running…
-                        </>
-                     ) : (
-                        'Run Report'
+                     {/* Semester — student only */}
+                     {activeTab === 'student' && (
+                        <div className='flex flex-col gap-1.5'>
+                           <label className='text-xs text-[#5A7A9A] font-semibold uppercase tracking-wider'>
+                              Semester
+                           </label>
+                           <div className='relative'>
+                              <select
+                                 id='select-semester'
+                                 value={semester}
+                                 onChange={(e) => setSemester(e.target.value)}
+                                 className='appearance-none bg-[#141E2E] border border-[#1E2D42] rounded-xl pl-4 pr-9 py-2.5 text-sm text-white focus:outline-none focus:border-[#5DA9FF] transition-colors cursor-pointer'
+                              >
+                                 <option value=''>All Semesters</option>
+                                 {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                                    <option key={s} value={s}>Semester {s}</option>
+                                 ))}
+                              </select>
+                              <span className='pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[#5A7A9A] text-xs'>▾</span>
+                           </div>
+                        </div>
                      )}
-               </button>
+
+                     {/* Quick date presets */}
+                     <div className='flex items-end gap-2 flex-wrap'>
+                        <div className='flex flex-col gap-1.5'>
+                           <span className='text-xs text-[#5A7A9A] font-semibold uppercase tracking-wider'>Quick Range</span>
+                           <div className='flex gap-1.5'>
+                              {(['week', 'month', 'semester'] as const).map((p) => (
+                                 <button
+                                    key={p}
+                                    id={`btn-quick-${p}`}
+                                    onClick={() => applyQuick(p)}
+                                    className='text-xs font-bold px-3 py-2.5 rounded-xl bg-[#141E2E] border border-[#1E2D42] text-[#5A7A9A] hover:border-[#5DA9FF] hover:text-white transition-all capitalize whitespace-nowrap'
+                                 >
+                                    {p === 'semester' ? 'Semester' : p === 'week' ? '7 Days' : '30 Days'}
+                                 </button>
+                              ))}
+                           </div>
+                        </div>
+                     </div>
+
+                     {/* Spacer */}
+                     <div className='flex-1' />
+
+                     {/* Reset + Run Report */}
+                     <div className='flex items-end gap-2'>
+                        <button
+                           id='btn-reset-filters'
+                           onClick={resetFilters}
+                           className='flex items-center gap-1.5 text-sm font-bold px-5 py-2.5 rounded-xl bg-[#141E2E] border border-[#1E2D42] text-[#5A7A9A] hover:border-[#5DA9FF] hover:text-white transition-all'
+                        >
+                           <svg className='w-3.5 h-3.5' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.5'>
+                              <path d='M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8' />
+                              <path d='M3 3v5h5' />
+                           </svg>
+                           Reset
+                        </button>
+                        <button
+                           id='btn-run-report'
+                           onClick={runReport}
+                           disabled={loading}
+                           className='flex items-center gap-2 bg-[#5DA9FF] hover:bg-[#4A96F0] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold px-6 py-2.5 rounded-xl transition-all text-sm whitespace-nowrap'
+                        >
+                           {loading ? (
+                              <>
+                                 <span className='w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block' />
+                                 Running…
+                              </>
+                           ) : (
+                              <>
+                                 <svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2'>
+                                    <polygon points='22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3' />
+                                 </svg>
+                                 Apply Filters
+                              </>
+                           )}
+                        </button>
+                     </div>
+                  </div>
+               </div>
             </div>
 
             {/* ── Error ────────────────────────────────────────────────────────── */}
