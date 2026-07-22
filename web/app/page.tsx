@@ -66,7 +66,10 @@ export default function Home() {
 return (
   <main className="min-h-screen flex bg-gradient-to-br from-[#0B1322] via-[#122038] to-[#1A2740] text-white">
 
-    <Sidebar open={sidebarOpen} />
+    <Sidebar
+      open={sidebarOpen}
+      onClose={() => setSidebarOpen(false)}
+    />
 
     <div className="flex-1 px-10 py-6">
 

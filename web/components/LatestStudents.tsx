@@ -1,25 +1,20 @@
 'use client';
 
-const students = [
-  {
-    name: "Rahul Sharma",
-    course: "B.Tech CSE",
-  },
-  {
-    name: "Priya Singh",
-    course: "MBA",
-  },
-  {
-    name: "Aman Gupta",
-    course: "MCA",
-  },
-  {
-    name: "Sneha Jain",
-    course: "BCA",
-  },
-];
+import { useEffect, useState } from "react";
+import { apiFetch } from "../lib/auth";
+
+
 
 export default function LatestStudents() {
+    const [students, setStudents] = useState<any[]>([]);
+    useEffect(() => {
+      apiFetch("/students?limit=5")
+        .then((res) => res.json())
+        .then((data) => {
+          setStudents(data.data || []);
+        })
+        .catch(console.error);
+    }, []);
   return (
     <div className="bg-[#1A2436] border border-[#2F4E73] rounded-2xl p-6 mt-8">
 
