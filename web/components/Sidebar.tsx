@@ -20,14 +20,15 @@ import {
 const menu = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Students", href: "/students", icon: Users },
-  { name: "Rooms", href: "/rooms", icon: Building2 },
-  { name: "Devices", href: "/devices", icon: Smartphone },
+  { name: "Rooms", href: "/rooms", icon: Building2, adminOnly: true },
+  { name: "Devices", href: "/devices", icon: Smartphone, adminOnly: true },
+  { name: "Master Data", href: "/master-data", icon: BookOpen, adminOnly: true },
   { name: "Reports", href: "/reports", icon: ClipboardList },
   { name: "Timetable", href: "/timetable", icon: CalendarDays },
   { name: "Holidays", href: "/holidays", icon: CalendarDays },
   { name: "Conflicts", href: "/conflicts", icon: AlertTriangle },
   { name: "Notifications", href: "/notifications", icon: Bell },
-  { name: "Change Log", href: "/change-log", icon: BookOpen },
+  { name: "Change Log", href: "/change-log", icon: BookOpen, adminOnly: true },
 ];
 
 interface SidebarProps {
