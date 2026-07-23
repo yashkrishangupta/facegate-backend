@@ -2,11 +2,12 @@
 
 import {
   Bell,
-  Search,
   UserCircle2,
   LogOut,
    Menu,
 } from "lucide-react";
+
+import Link from "next/link";
 
 
 interface Props {
@@ -59,30 +60,17 @@ export default function Topbar({
       {/* Right */}
       <div className="flex items-center gap-4">
 
-        {/* Search */}
-        <div className="flex items-center gap-2 bg-[#1A2436] border border-[#2F4E73] rounded-lg px-3 py-2">
 
-          <Search
-            size={18}
-            className="text-slate-400"
-          />
-
-          <input
-            type="text"
-            placeholder="Search..."
-            className="bg-transparent outline-none text-sm text-white placeholder:text-slate-500 w-40"
-          />
-
-        </div>
 
         {/* Notification */}
-        <button className="relative bg-[#1A2436] p-2 rounded-lg hover:bg-[#24324B] hover:scale-105 transition-all">
+       <Link
+         href="/notifications"
+         className="relative bg-[#1A2436] p-2 rounded-lg hover:bg-[#24324B] hover:scale-105 transition-all"
+       >
+         <Bell size={20} />
 
-          <Bell size={20} />
-
-          <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500"></span>
-
-        </button>
+         <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500"></span>
+       </Link>
 
         {/* Profile */}
         <div className="flex items-center gap-3 bg-[#1A2436] border border-[#2F4E73] rounded-lg px-3 py-2">
