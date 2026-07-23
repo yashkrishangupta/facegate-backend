@@ -11,7 +11,7 @@ import WelcomeBanner from "../components/WelcomeBanner";
 import SystemStatus from "../components/SystemStatus";
 import LatestStudents from "../components/LatestStudents";
 import AttendanceTrend from "../components/AttendanceTrend";
-const [sidebarOpen, setSidebarOpen] = useState(false);
+
 
 
 import {
@@ -23,6 +23,7 @@ import {
 
 export default function Home() {
   const router = useRouter()
+
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [admin, setAdmin] = useState<ReturnType<typeof getAdmin>>(null)
   const [checkingAuth, setCheckingAuth] = useState(true)
