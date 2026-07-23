@@ -51,7 +51,7 @@ export default function StudentsPage() {
   // Edit state
   const [editModal, setEditModal] = useState(false)
   const [editStudent, setEditStudent] = useState<Student | null>(null)
-  const [editForm, setEditForm] = useState({ email: '', phone: '', student_status: 'ACTIVE', profile_photo_url: '' })
+  const [editForm, setEditForm] = useState({ email: '', phone: '', student_status: 'ACTIVE', profile_photo_url: '', first_name: '', last_name: '', gender: 'Male', admission_year: '', date_of_birth: '', roll_number: '', registration_number: '' })
   const [editError, setEditError] = useState('')
   const [editSubmitting, setEditSubmitting] = useState(false)
 
@@ -131,7 +131,19 @@ export default function StudentsPage() {
 
   const openEdit = (s: Student) => {
     setEditStudent(s)
-    setEditForm({ email: s.email || '', phone: s.phone || '', student_status: s.student_status || 'ACTIVE', profile_photo_url: s.profile_photo_url || '' })
+    setEditForm({
+      email: s.email || '',
+      phone: s.phone || '',
+      student_status: s.student_status || 'ACTIVE',
+      profile_photo_url: s.profile_photo_url || '',
+      first_name: s.first_name || '',
+      last_name: s.last_name || '',
+      gender: s.gender || 'Male',
+      admission_year: String(s.admission_year || ''),
+      date_of_birth: s.date_of_birth ? s.date_of_birth.slice(0, 10) : '',
+      roll_number: s.roll_number || '',
+      registration_number: s.registration_number || ''
+    })
     setEditError('')
     setEditModal(true)
   }
@@ -143,8 +155,15 @@ export default function StudentsPage() {
       const res = await apiFetch(`/students/${editStudent.student_id}`, {
         method: 'PUT',
         body: JSON.stringify({
+          first_name: editForm.first_name || undefined,
+          last_name: editForm.last_name || undefined,
+          roll_number: editForm.roll_number || undefined,
+          registration_number: editForm.registration_number || undefined,
           email: editForm.email || undefined,
           phone: editForm.phone || undefined,
+          gender: editForm.gender || undefined,
+          admission_year: editForm.admission_year ? Number(editForm.admission_year) : undefined,
+          date_of_birth: editForm.date_of_birth || undefined,
           student_status: editForm.student_status,
           profile_photo_url: editForm.profile_photo_url || undefined
         })
@@ -314,8 +333,20 @@ export default function StudentsPage() {
               <p className="text-[#90A6BD] text-sm mb-4">{editStudent.first_name} {editStudent.last_name} · {editStudent.roll_number}</p>
               {editError && <p className="text-[#F87171] text-sm mb-3">{editError}</p>}
               <div className="flex flex-col gap-3">
+                <input placeholder="First Name" value={editForm.first_name} onChange={(e) => setEditForm(p => ({ ...p, first_name: e.target.value }))} className={inputCls} />
+                <input placeholder="Last Name" value={editForm.last_name} onChange={(e) => setEditForm(p => ({ ...p, last_name: e.target.value }))} className={inputCls} />
+                <input placeholder="Roll Number" value={editForm.roll_number} onChange={(e) => setEditForm(p => ({ ...p, roll_number: e.target.value }))} className={inputCls} />
+                <input placeholder="Registration Number" value={editForm.registration_number} onChange={(e) => setEditForm(p => ({ ...p, registration_number: e.target.value }))} className={inputCls} />
                 <input placeholder="Email" value={editForm.email} onChange={(e) => setEditForm(p => ({ ...p, email: e.target.value }))} className={inputCls} />
                 <input placeholder="Phone" value={editForm.phone} onChange={(e) => setEditForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} />
+                <select value={editForm.gender} onChange={(e) => setEditForm(p => ({ ...p, gender: e.target.value }))} className={inputCls}>
+                  {['Male','Female','Other'].map(g => <option key={g}>{g}</option>)}
+                </select>
+                <input placeholder="Admission Year" type="number" value={editForm.admission_year} onChange={(e) => setEditForm(p => ({ ...p, admission_year: e.target.value }))} className={inputCls} />
+                <div>
+                  <p className="text-[#90A6BD] text-xs mb-1">Date of Birth</p>
+                  <input type="date" value={editForm.date_of_birth} onChange={(e) => setEditForm(p => ({ ...p, date_of_birth: e.target.value }))} className={`${inputCls} w-full`} />
+                </div>
                 <select value={editForm.student_status} onChange={(e) => setEditForm(p => ({ ...p, student_status: e.target.value }))} className={inputCls}>
                   {['ACTIVE','INACTIVE','GRADUATED','DROPPED'].map(s => <option key={s}>{s}</option>)}
                 </select>

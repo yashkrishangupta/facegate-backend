@@ -68,7 +68,7 @@ function DepartmentsTab() {
   const [editItem, setEditItem] = useState<any | null>(null)
   const [error, setError] = useState('')
   const [form, setForm] = useState({ department_code: '', department_name: '', hod_name: '', email: '', phone: '' })
-  const [editForm, setEditForm] = useState({ department_name: '', hod_name: '', email: '' })
+  const [editForm, setEditForm] = useState({ department_code: '', department_name: '', hod_name: '', email: '', phone: '' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -91,7 +91,7 @@ function DepartmentsTab() {
 
   const openEdit = (d: any) => {
     setEditItem(d)
-    setEditForm({ department_name: d.department_name, hod_name: d.hod_name || '', email: d.email || '' })
+    setEditForm({ department_code: d.department_code || '', department_name: d.department_name, hod_name: d.hod_name || '', email: d.email || '', phone: d.phone || '' })
     setError('')
   }
 
@@ -149,9 +149,11 @@ function DepartmentsTab() {
         <Modal title="Edit Department" onClose={() => setEditItem(null)}>
           {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
           <div className="flex flex-col gap-3">
+            <input placeholder="Department Code" value={editForm.department_code} onChange={(e) => setEditForm(p => ({ ...p, department_code: e.target.value }))} className={inputCls} />
             <input placeholder="Department Name" value={editForm.department_name} onChange={(e) => setEditForm(p => ({ ...p, department_name: e.target.value }))} className={inputCls} />
             <input placeholder="HOD Name" value={editForm.hod_name} onChange={(e) => setEditForm(p => ({ ...p, hod_name: e.target.value }))} className={inputCls} />
             <input placeholder="Email" value={editForm.email} onChange={(e) => setEditForm(p => ({ ...p, email: e.target.value }))} className={inputCls} />
+            <input placeholder="Phone" value={editForm.phone} onChange={(e) => setEditForm(p => ({ ...p, phone: e.target.value }))} className={inputCls} />
           </div>
           <div className="flex gap-3 mt-5">
             <button onClick={() => setEditItem(null)} className="flex-1 border border-[#2F4E73] text-[#90A6BD] rounded-lg py-2 text-sm">Cancel</button>
@@ -170,7 +172,7 @@ function ProgramsTab() {
   const [editItem, setEditItem] = useState<any | null>(null)
   const [error, setError] = useState('')
   const [form, setForm] = useState({ program_code: '', program_name: '', degree_type: DEGREE_TYPES[0], duration_years: '4' })
-  const [editForm, setEditForm] = useState({ program_name: '', degree_type: DEGREE_TYPES[0], duration_years: '4' })
+  const [editForm, setEditForm] = useState({ program_code: '', program_name: '', degree_type: DEGREE_TYPES[0], duration_years: '4' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -193,7 +195,7 @@ function ProgramsTab() {
 
   const openEdit = (p: any) => {
     setEditItem(p)
-    setEditForm({ program_name: p.program_name, degree_type: p.degree_type, duration_years: String(p.duration_years) })
+    setEditForm({ program_code: p.program_code || '', program_name: p.program_name, degree_type: p.degree_type, duration_years: String(p.duration_years) })
     setError('')
   }
 
@@ -256,6 +258,7 @@ function ProgramsTab() {
         <Modal title="Edit Program" onClose={() => setEditItem(null)}>
           {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
           <div className="flex flex-col gap-3">
+            <input placeholder="Program Code" value={editForm.program_code} onChange={(e) => setEditForm(p => ({ ...p, program_code: e.target.value }))} className={inputCls} />
             <input placeholder="Program Name" value={editForm.program_name} onChange={(e) => setEditForm(p => ({ ...p, program_name: e.target.value }))} className={inputCls} />
             <select value={editForm.degree_type} onChange={(e) => setEditForm(p => ({ ...p, degree_type: e.target.value }))} className={inputCls}>
               {DEGREE_TYPES.map(d => <option key={d} value={d}>{d}</option>)}
@@ -283,7 +286,7 @@ function BatchesTab() {
   const [error, setError] = useState('')
   const [filters, setFilters] = useState({ academic_year: '', program_id: '', semester: '', department_id: '' })
   const [form, setForm] = useState({ department_id: '', batch_code: '', program_id: '', academic_year: '', semester: '1', section: '', strength: '60', batch_advisor_id: '' })
-  const [editForm, setEditForm] = useState({ batch_code: '', strength: '60', batch_advisor_id: '' })
+  const [editForm, setEditForm] = useState({ batch_code: '', academic_year: '', semester: '1', section: '', strength: '60', batch_advisor_id: '' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -312,14 +315,14 @@ function BatchesTab() {
 
   const openEdit = (b: any) => {
     setEditItem(b)
-    setEditForm({ batch_code: b.batch_code, strength: String(b.strength || 60), batch_advisor_id: b.batch_advisor_id || '' })
+    setEditForm({ batch_code: b.batch_code, academic_year: b.academic_year || '', semester: String(b.semester || 1), section: b.section || '', strength: String(b.strength || 60), batch_advisor_id: b.batch_advisor_id || '' })
     setError('')
   }
 
   const handleEdit = async () => {
     setError('')
     try {
-      const res = await apiFetch(`/batches/${editItem.batch_id}`, { method: 'PUT', body: JSON.stringify({ ...editForm, strength: Number(editForm.strength), batch_advisor_id: editForm.batch_advisor_id || undefined }) })
+      const res = await apiFetch(`/batches/${editItem.batch_id}`, { method: 'PUT', body: JSON.stringify({ ...editForm, semester: Number(editForm.semester), strength: Number(editForm.strength), batch_advisor_id: editForm.batch_advisor_id || undefined }) })
       const json = await res.json()
       if (!res.ok || !json.success) { setError(json.message || 'Failed to update'); return }
       setEditItem(null); fetchItems()
@@ -410,10 +413,15 @@ function BatchesTab() {
       {editItem && (
         <Modal title="Edit Batch" onClose={() => setEditItem(null)}>
           {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
-          <div className="flex flex-col gap-3">
-            <input placeholder="Batch Code" value={editForm.batch_code} onChange={(e) => setEditForm(p => ({ ...p, batch_code: e.target.value }))} className={inputCls} />
+          <div className="grid grid-cols-2 gap-3">
+            <input placeholder="Batch Code" value={editForm.batch_code} onChange={(e) => setEditForm(p => ({ ...p, batch_code: e.target.value }))} className={`col-span-2 ${inputCls}`} />
+            <input placeholder="Academic Year (e.g. 2026-27)" value={editForm.academic_year} onChange={(e) => setEditForm(p => ({ ...p, academic_year: e.target.value }))} className={inputCls} />
+            <select value={editForm.semester} onChange={(e) => setEditForm(p => ({ ...p, semester: e.target.value }))} className={inputCls}>
+              {[1,2,3,4,5,6,7,8].map(s => <option key={s} value={s}>Semester {s}</option>)}
+            </select>
+            <input placeholder="Section" value={editForm.section} onChange={(e) => setEditForm(p => ({ ...p, section: e.target.value }))} className={inputCls} />
             <input placeholder="Strength" type="number" value={editForm.strength} onChange={(e) => setEditForm(p => ({ ...p, strength: e.target.value }))} className={inputCls} />
-            <select value={editForm.batch_advisor_id} onChange={(e) => setEditForm(p => ({ ...p, batch_advisor_id: e.target.value }))} className={inputCls}>
+            <select value={editForm.batch_advisor_id} onChange={(e) => setEditForm(p => ({ ...p, batch_advisor_id: e.target.value }))} className={`col-span-2 ${inputCls}`}>
               <option value="">No Advisor</option>
               {faculty.map((f: any) => <option key={f.faculty_id} value={f.faculty_id}>{f.first_name} {f.last_name}</option>)}
             </select>
@@ -438,7 +446,7 @@ function SubjectsTab() {
   const [error, setError] = useState('')
   const [filters, setFilters] = useState({ program_id: '', semester: '' })
   const [form, setForm] = useState({ department_id: '', subject_code: '', subject_name: '', program_id: '', semester: '1', credits: '4', subject_type: SUBJECT_TYPES[0], course_category: COURSE_CATEGORIES[0], contact_hours_per_week: '4' })
-  const [editForm, setEditForm] = useState({ subject_name: '', credits: '4', subject_type: SUBJECT_TYPES[0], course_category: COURSE_CATEGORIES[0] })
+  const [editForm, setEditForm] = useState({ subject_code: '', subject_name: '', credits: '4', subject_type: SUBJECT_TYPES[0], course_category: COURSE_CATEGORIES[0], contact_hours_per_week: '4' })
 
   const fetchItems = async () => {
     setLoading(true)
@@ -467,7 +475,7 @@ function SubjectsTab() {
 
   const openEdit = (s: any) => {
     setEditItem(s)
-    setEditForm({ subject_name: s.subject_name, credits: String(s.credits), subject_type: s.subject_type, course_category: s.course_category })
+    setEditForm({ subject_code: s.subject_code || '', subject_name: s.subject_name, credits: String(s.credits), subject_type: s.subject_type, course_category: s.course_category, contact_hours_per_week: String(s.contact_hours_per_week || 4) })
     setError('')
   }
 
@@ -553,8 +561,10 @@ function SubjectsTab() {
         <Modal title="Edit Subject" onClose={() => setEditItem(null)}>
           {error && <p className="text-[#F87171] text-sm mb-3">{error}</p>}
           <div className="flex flex-col gap-3">
+            <input placeholder="Subject Code" value={editForm.subject_code} onChange={(e) => setEditForm(p => ({ ...p, subject_code: e.target.value }))} className={inputCls} />
             <input placeholder="Subject Name" value={editForm.subject_name} onChange={(e) => setEditForm(p => ({ ...p, subject_name: e.target.value }))} className={inputCls} />
             <input placeholder="Credits" type="number" value={editForm.credits} onChange={(e) => setEditForm(p => ({ ...p, credits: e.target.value }))} className={inputCls} />
+            <input placeholder="Contact Hrs/Week" type="number" value={editForm.contact_hours_per_week} onChange={(e) => setEditForm(p => ({ ...p, contact_hours_per_week: e.target.value }))} className={inputCls} />
             <select value={editForm.subject_type} onChange={(e) => setEditForm(p => ({ ...p, subject_type: e.target.value }))} className={inputCls}>
               {SUBJECT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
